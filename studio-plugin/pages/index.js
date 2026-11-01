@@ -1,0 +1,197 @@
+import React from "react"
+import Layout from "@theme/Layout"
+import Link from "@docusaurus/Link"
+import useBaseUrl from "@docusaurus/useBaseUrl"
+import styles from "./index.module.css"
+
+const Icon = ({ d }) => (
+  <svg viewBox="0 0 24 24" className={styles.featureIcon} aria-hidden="true">
+    <path d={d} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+const FEATURES = [
+  {
+    title: "One click: Code Mode",
+    text: "Press one button in the Studio plugin and every script you open in Studio opens in Bloxcode instead.",
+    icon: "M13 2L4 14h7l-1 8 9-12h-7z",
+  },
+  {
+    title: "Full Explorer",
+    text: "Workspace, ServerScriptService, ReplicatedStorage, StarterGui and more, mirrored live with every folder and object.",
+    icon: "M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 6V5a1 1 0 0 1 1-1h4l2 2",
+  },
+  {
+    title: "Wally packages built in",
+    text: "Search Cmdr, Knit, Promise, Fusion and thousands more, then install with one click. Dependencies included.",
+    icon: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9",
+  },
+  {
+    title: "Two-way sync",
+    text: "What you type is in Studio right away. What happens in Studio shows up here. Everything can be undone with Ctrl+Z.",
+    icon: "M4 9h13l-3-3M20 15H7l3 3",
+  },
+  {
+    title: "Luau done right",
+    text: "Syntax highlighting, string interpolation, types, snippets and autocomplete that knows your Explorer.",
+    icon: "M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16",
+  },
+  {
+    title: "Always up to date",
+    text: "Bloxcode updates itself on startup, just like Discord. No reinstalling, ever.",
+    icon: "M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5",
+  },
+]
+
+const STEPS = [
+  {
+    title: "Install",
+    text: "Run the Bloxcode installer. The Studio plugin is set up automatically on first launch.",
+  },
+  {
+    title: "Turn on Code Mode",
+    text: "In Studio, open Plugins → Bloxcode, turn on Code Mode and allow the permissions.",
+  },
+  {
+    title: "Start coding",
+    text: "Double-click a script and it opens in Bloxcode. Type, and Studio is updated instantly.",
+  },
+]
+
+const SHORTCUTS = [
+  [["Ctrl", "P"], "Find & open a script"],
+  [["Ctrl", "S"], "Send to Studio now"],
+  [["Ctrl", "W"], "Close tab"],
+  [["Ctrl", "Tab"], "Next tab"],
+  [["F2"], "Rename"],
+  [["Del"], "Delete"],
+]
+
+function Window({ src, alt, className }) {
+  return (
+    <div className={`${styles.window} ${className || ""}`}>
+      <div className={styles.windowBar}>
+        <span />
+        <span />
+        <span />
+      </div>
+      <img src={src} alt={alt} loading="lazy" />
+    </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <Layout title="The external code editor for Roblox Studio" description="Bloxcode opens your Roblox Studio scripts in a VS Code-style editor, with live sync, a full Explorer and Wally packages.">
+      <main className={styles.page}>
+        <section className={styles.hero}>
+          <div className={styles.heroGlow} aria-hidden="true" />
+          <div className={styles.grid} aria-hidden="true" />
+          <div className={styles.heroInner}>
+            <div className={styles.brand}>
+              <img src={useBaseUrl("img/logo.png")} alt="" className={styles.heroLogo} />
+              <span className={styles.brandName}>Bloxcode</span>
+            </div>
+            <span className={styles.badge}>For Roblox Studio · Windows</span>
+            <h1 className={styles.title}>
+              Write Roblox code
+              <br />
+              <span className={styles.gradient}>like in VS Code.</span>
+            </h1>
+            <p className={styles.subtitle}>
+              Bloxcode replaces the Roblox Studio script editor with a modern editor: full Explorer, autocomplete, Wally packages and live sync.
+            </p>
+            <div className={styles.ctas}>
+              <a className={`${styles.btn} ${styles.btnPrimary}`} href="/download">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Download for Windows
+              </a>
+              <Link className={`${styles.btn} ${styles.btnGhost}`} to="/docs/intro">
+                Get started
+              </Link>
+            </div>
+          </div>
+          <div className={styles.heroShot}>
+            <Window src={useBaseUrl("img/editor.png")} alt="Bloxcode with an open script and the Explorer" />
+          </div>
+        </section>
+
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <span className={styles.eyebrow}>Features</span>
+            <h2>Everything the Studio editor can't do</h2>
+          </div>
+          <div className={styles.features}>
+            {FEATURES.map((f) => (
+              <div key={f.title} className={styles.feature}>
+                <Icon d={f.icon} />
+                <h3>{f.title}</h3>
+                <p>{f.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={`${styles.section} ${styles.split}`}>
+          <div className={styles.splitText}>
+            <span className={styles.eyebrow}>Explorer</span>
+            <h2>Your whole game. One right-click.</h2>
+            <p>
+              The Explorer shows the same structure as Studio. Create Scripts, RemoteEvents or folders right here and they appear in Studio instantly.
+            </p>
+            <ul className={styles.checks}>
+              <li>Drag & drop to move</li>
+              <li>Copy the Lua path in one click</li>
+              <li>"Select in Studio" jumps to the object</li>
+              <li>Every change is one Ctrl+Z step in Studio</li>
+            </ul>
+          </div>
+          <Window src={useBaseUrl("img/explorer.png")} alt="Context menu in the Bloxcode Explorer" className={styles.splitShot} />
+        </section>
+
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <span className={styles.eyebrow}>Setup</span>
+            <h2>Ready in three steps</h2>
+          </div>
+          <div className={styles.steps}>
+            {STEPS.map((s, i) => (
+              <div key={s.title} className={styles.step}>
+                <span className={styles.stepNum}>{i + 1}</span>
+                <h3>{s.title}</h3>
+                <p>{s.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <span className={styles.eyebrow}>Shortcuts</span>
+            <h2>Keep your hands on the keyboard</h2>
+          </div>
+          <div className={styles.shortcuts}>
+            {SHORTCUTS.map(([keys, label]) => (
+              <div key={label} className={styles.shortcut}>
+                <span className={styles.keys}>
+                  {keys.map((k) => (
+                    <kbd key={k}>{k}</kbd>
+                  ))}
+                </span>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.cta}>
+          <h2>Ready for better Roblox code?</h2>
+          <p>Install, turn on Code Mode, done. Free, and it keeps itself up to date.</p>
+          <a className={`${styles.btn} ${styles.btnPrimary}`} href="/download">
+            Download Bloxcode
+          </a>
+        </section>
+      </main>
+    </Layout>
+  )
+}
