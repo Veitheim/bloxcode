@@ -23,6 +23,11 @@ label = "Packages"
 position = "left"
 
 [[navbar.items]]
+to = "/docs/claude"
+label = "Claude"
+position = "left"
+
+[[navbar.items]]
 to = "/docs/troubleshooting"
 label = "Help"
 position = "right"
@@ -45,6 +50,10 @@ to = "/docs/explorer"
 [[footer.links.items]]
 label = "Wally Packages"
 to = "/docs/packages"
+
+[[footer.links.items]]
+label = "Code with Claude"
+to = "/docs/claude"
 
 [[footer.links.items]]
 label = "Keyboard Shortcuts"

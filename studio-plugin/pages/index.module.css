@@ -291,3 +291,51 @@
   .section { padding-top: 80px; }
   .cta { margin: 80px 16px 60px; }
 }
+
+/* ---------- Claude section ---------- */
+a.badge:hover { text-decoration: none; border-color: var(--ifm-color-primary); color: var(--ifm-font-color-base); }
+.splitReverse { grid-template-columns: 1.15fr 1fr; }
+.chat {
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+  border-radius: 16px;
+  background:
+    radial-gradient(420px 200px at 20% 0%, rgba(197, 139, 255, 0.18), transparent 70%),
+    var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 70px -30px rgba(120, 80, 220, 0.45);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+.chatUser {
+  justify-self: end;
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 14px 14px 4px 14px;
+  background: linear-gradient(135deg, #2f7cf6, #6b5cff);
+  color: #fff;
+}
+.chatTools { display: grid; gap: 6px; }
+.chatTools span {
+  justify-self: start;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  color: var(--ifm-color-emphasis-700);
+  background: var(--ifm-background-color);
+}
+.chatTools span::before { content: "✦ "; color: #b67cff; }
+.chatClaude {
+  max-width: 92%;
+  padding: 10px 14px;
+  border-radius: 14px 14px 14px 4px;
+  border: 1px solid var(--line);
+  background: var(--ifm-background-color);
+}
+@media (max-width: 900px) {
+  .splitReverse { grid-template-columns: 1fr; }
+  .splitReverse .chat { order: 2; }
+}

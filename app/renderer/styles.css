@@ -295,3 +295,14 @@ kbd {
 .pkg-empty { padding: 8px 20px; color: var(--fg-faint); font-size: 12.5px; }
 .sb-item.update { background: #8957e5; color: #fff; }
 .sb-item.update:empty { display: none; }
+
+/* ---------- Claude ---------- */
+.sb-item.agent:empty { display: none; }
+.sb-item.agent { color: #e0b0ff; }
+.sb-item.agent.live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #c58bff; margin-right: 6px; animation: agentPulse 1s ease-in-out infinite; }
+@keyframes agentPulse { 50% { opacity: .25; } }
+.claude-prompt { position: relative; margin: 6px 0 8px; background: #252526; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; max-height: 220px; overflow: auto; }
+.claude-log { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12px; }
+.claude-log li { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid #2a2a2a; color: var(--fg); }
+.claude-log li span { color: var(--fg-faint); flex: none; font-variant-numeric: tabular-nums; }
+.claude-ok { color: var(--green); }

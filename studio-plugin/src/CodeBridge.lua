@@ -10,7 +10,9 @@
 	- the Explorer (Workspace, ServerScriptService, ReplicatedStorage, …) is mirrored to
 	  Bloxcode live,
 	- the plugin runs commands from Bloxcode (create, rename, move, delete, set source,
-	  install Wally packages).
+	  install Wally packages),
+	- the Studio output (prints, warnings, errors, also from play tests) is sent to Bloxcode,
+	  so Claude can read it when it codes with you (see [Claude](/docs/claude)).
 
 	It talks to Bloxcode over HTTP at `http://localhost:34872` (see [Protocol]).
 	Every change from Bloxcode is recorded with [ChangeHistoryService], so you can undo it
@@ -22,11 +24,52 @@ local ScriptEditorService = game:GetService("ScriptEditorService")
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local Selection = game:GetService("Selection")
 local RunService = game:GetService("RunService")
+local LogService = game:GetService("LogService")
+local CollectionService = game:GetService("CollectionService")
 
--- Plugins also load inside Play-test sessions. Only the edit DataModel talks to Bloxcode.
+local LOG_URL = "http://localhost:34872/log"
+
+-- Plugins also load inside Play-test sessions. Those only forward the output to Bloxcode;
+-- everything else runs in the edit DataModel.
 if not RunService:IsEdit() then
+	if not plugin:GetSetting("BloxcodeCodeMode") then
+		return
+	end
+	local context = if RunService:IsServer() then "server" else "client"
+	local pending = {}
+	LogService.MessageOut:Connect(function(message, messageType)
+		if #pending < 500 then
+			table.insert(pending, { message = message, kind = messageType.Name, context = context })
+		end
+	end)
+	task.spawn(function()
+		while true do
+			task.wait(0.5)
+			if #pending > 0 then
+				local batch = pending
+				pending = {}
+				pcall(function()
+					HttpService:RequestAsync({
+						Url = LOG_URL,
+						Method = "POST",
+						Headers = { ["Content-Type"] = "application/json" },
+						Body = HttpService:JSONEncode({ logs = batch }),
+					})
+				end)
+			end
+		end
+	end)
 	return
 end
+
+--[=[
+	@prop PLUGIN_VERSION number
+	@within CodeBridge
+	@readonly
+	Version of the plugin protocol. Bloxcode uses it to tell you when Studio
+	still runs an older copy of the plugin.
+]=]
+local PLUGIN_VERSION = 2
 
 --[=[
 	@prop BASE_URL string
@@ -86,6 +129,7 @@ local serviceConns = {}
 local openInApp = {} -- id -> true while the script has a tab in Bloxcode
 local lastSource = {} -- id -> last source known on both sides
 local outbox = {}
+local commandError = nil -- set by withRecording when a command fails
 
 local setStatus -- forward declaration (UI)
 
@@ -167,7 +211,7 @@ local function withRecording(name, fn)
 		)
 	end
 	if not ok then
-		push({ op = "error", message = tostring(err) })
+		commandError = tostring(err)
 	end
 	return ok
 end
@@ -301,7 +345,16 @@ local function sendSnapshot()
 	end
 end
 
+local logConn = nil
+
 local function startTracking()
+	if not logConn then
+		logConn = LogService.MessageOut:Connect(function(message, messageType)
+			if codeMode and connected then
+				push({ op = "log", message = message, kind = messageType.Name, context = "edit" })
+			end
+		end)
+	end
 	for _, serviceName in TRACKED_SERVICES do
 		local ok, service = pcall(function()
 			return game:GetService(serviceName)
@@ -314,6 +367,10 @@ local function startTracking()
 end
 
 local function stopTracking()
+	if logConn then
+		logConn:Disconnect()
+		logConn = nil
+	end
 	for _, c in serviceConns do
 		c:Disconnect()
 	end
@@ -342,7 +399,7 @@ end
 	@param inst LuaSourceContainer
 	@param focus boolean -- bring the Bloxcode window to the front
 ]=]
-local function openInBloxcode(inst: LuaSourceContainer, focus: boolean)
+local function openInBloxcode(inst: LuaSourceContainer, focus: boolean, agent: boolean?)
 	local id = getId(inst)
 	local src = readSource(inst)
 	openInApp[id] = true
@@ -356,6 +413,7 @@ local function openInBloxcode(inst: LuaSourceContainer, focus: boolean)
 		path = pathOf(inst),
 		source = src,
 		focus = focus,
+		agent = agent,
 	})
 end
 
@@ -386,6 +444,7 @@ end)
 -- ---------------------------------------------------------------------
 
 local commands = {}
+local setProps -- defined below, used by create and setProperties
 
 function commands.snapshot()
 	sendSnapshot()
@@ -394,9 +453,9 @@ end
 function commands.open(cmd)
 	local inst = byId[cmd.id]
 	if inst and isScript(inst) then
-		openInBloxcode(inst, false)
+		openInBloxcode(inst, false, cmd.agent)
 	else
-		push({ op = "error", message = "Script not found." })
+		error("Script not found.", 0)
 	end
 end
 
@@ -407,8 +466,7 @@ end
 function commands.setSource(cmd)
 	local inst = byId[cmd.id]
 	if not (inst and isScript(inst)) then
-		push({ op = "error", message = "Script no longer exists." })
-		return
+		error("Script no longer exists.", 0)
 	end
 	local source = cmd.source
 	lastSource[cmd.id] = source
@@ -427,15 +485,20 @@ end
 function commands.create(cmd)
 	local parent = byId[cmd.parentId]
 	if not parent then
-		push({ op = "error", message = "Target not found." })
-		return
+		error("Target not found.", 0)
 	end
 	local inst
 	local ok = withRecording("New " .. tostring(cmd.className), function()
 		inst = Instance.new(cmd.className)
 		inst.Name = cmd.name or cmd.className
-		if DEFAULT_SOURCE[cmd.className] then
-			inst.Source = DEFAULT_SOURCE[cmd.className]
+		if inst:IsA("LuaSourceContainer") then
+			local source = cmd.source or DEFAULT_SOURCE[cmd.className]
+			if source then
+				(inst :: any).Source = source
+			end
+		end
+		if cmd.properties then
+			setProps(inst, cmd.properties)
 		end
 		inst.Parent = parent
 	end)
@@ -443,15 +506,20 @@ function commands.create(cmd)
 		-- send the node right away so the app can select it, even with deferred signals
 		push(nodeEvent(inst))
 		track(inst)
-		push({ op = "created", id = getId(inst), parent = getId(parent) })
+		push({ op = "created", id = getId(inst), parent = getId(parent), agent = cmd.agent })
 		if isScript(inst) then
-			openInBloxcode(inst, false)
+			openInBloxcode(inst, false, cmd.agent)
 		end
+		return { id = getId(inst), path = pathOf(inst) }
 	end
+	return nil
 end
 
 function commands.rename(cmd)
 	local inst = byId[cmd.id]
+	if not inst then
+		error("Instance not found.", 0)
+	end
 	if inst then
 		withRecording("Rename", function()
 			inst.Name = cmd.name
@@ -461,6 +529,9 @@ end
 
 function commands.move(cmd)
 	local inst, parent = byId[cmd.id], byId[cmd.parentId]
+	if not (inst and parent) then
+		error("Instance or new parent not found.", 0)
+	end
 	if inst and parent then
 		withRecording("Move", function()
 			inst.Parent = parent
@@ -482,6 +553,9 @@ end
 
 function commands.delete(cmd)
 	local inst = byId[cmd.id]
+	if not inst then
+		error("Instance not found.", 0)
+	end
 	if inst then
 		withRecording("Delete", function()
 			-- Parent = nil instead of Destroy() so Ctrl+Z can bring it back
@@ -563,14 +637,263 @@ function commands.select(cmd)
 	end
 end
 
+--[=[
+	Returns the source of a script (what is in the Studio editor, if it is open there).
+	@within CodeBridge
+	@private
+]=]
+function commands.read(cmd: any)
+	local inst = byId[cmd.id]
+	if not (inst and isScript(inst)) then
+		error("Script not found.", 0)
+	end
+	return { source = readSource(inst), path = pathOf(inst), className = inst.ClassName }
+end
+
+--[=[
+	Searches the source of every script for a piece of text (not case-sensitive).
+	@within CodeBridge
+	@private
+]=]
+function commands.search(cmd: any)
+	local query = string.lower(tostring(cmd.query or ""))
+	if query == "" then
+		error("Empty search.", 0)
+	end
+	local limit = tonumber(cmd.limit) or 100
+	local matches = {}
+	for _, serviceName in TRACKED_SERVICES do
+		local ok, service = pcall(function()
+			return game:GetService(serviceName)
+		end)
+		if ok and service then
+			for _, d in service:GetDescendants() do
+				if isScript(d) then
+					local lineNo = 0
+					for line in string.gmatch(readSource(d) .. "\n", "(.-)\n") do
+						lineNo += 1
+						if string.find(string.lower(line), query, 1, true) then
+							table.insert(matches, {
+								id = getId(d),
+								path = pathOf(d),
+								line = lineNo,
+								text = string.sub(line, 1, 200),
+							})
+							if #matches >= limit then
+								return { matches = matches, truncated = true }
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return { matches = matches, truncated = false }
+end
+
+function commands.selection()
+	local list = {}
+	for _, inst in Selection:Get() do
+		table.insert(list, { id = getId(inst), path = pathOf(inst), className = inst.ClassName })
+	end
+	return list
+end
+
+-- Property values travel as JSON: numbers, booleans and strings as they are, everything else
+-- as { type = "Vector3", value = { 1, 2, 3 } } and so on.
+local function encodeValue(v)
+	local t = typeof(v)
+	if t == "number" or t == "boolean" or t == "string" then
+		return v
+	elseif t == "Vector3" then
+		return { type = t, value = { v.X, v.Y, v.Z } }
+	elseif t == "Vector2" then
+		return { type = t, value = { v.X, v.Y } }
+	elseif t == "Color3" then
+		return { type = t, value = { math.round(v.R * 255), math.round(v.G * 255), math.round(v.B * 255) } }
+	elseif t == "UDim2" then
+		return { type = t, value = { v.X.Scale, v.X.Offset, v.Y.Scale, v.Y.Offset } }
+	elseif t == "UDim" then
+		return { type = t, value = { v.Scale, v.Offset } }
+	elseif t == "CFrame" then
+		return { type = t, value = { v:GetComponents() } }
+	elseif t == "EnumItem" then
+		return { type = "Enum", value = tostring(v) }
+	elseif t == "BrickColor" then
+		return { type = t, value = v.Name }
+	elseif t == "Instance" then
+		return { type = t, value = pathOf(v) }
+	elseif t == "nil" then
+		return { type = "nil" }
+	end
+	return { type = t, value = tostring(v) }
+end
+
+local function findByPath(path: string): Instance?
+	local current: Instance? = game
+	for part in string.gmatch(path, "[^%.]+") do
+		current = current and current:FindFirstChild(part)
+	end
+	return current
+end
+
+local function decodeValue(prop, v)
+	if type(v) ~= "table" then
+		return v
+	end
+	local t, a = v.type, v.value
+	if t == "Vector3" then
+		return Vector3.new(a[1], a[2], a[3])
+	elseif t == "Vector2" then
+		return Vector2.new(a[1], a[2])
+	elseif t == "Color3" then
+		if type(a) == "string" then
+			return Color3.fromHex(a)
+		end
+		return Color3.fromRGB(a[1], a[2], a[3])
+	elseif t == "UDim2" then
+		return UDim2.new(a[1], a[2], a[3], a[4])
+	elseif t == "UDim" then
+		return UDim.new(a[1], a[2])
+	elseif t == "CFrame" then
+		if #a == 3 then
+			return CFrame.new(a[1], a[2], a[3])
+		elseif #a == 6 then
+			return CFrame.new(a[1], a[2], a[3])
+				* CFrame.fromOrientation(math.rad(a[4]), math.rad(a[5]), math.rad(a[6]))
+		end
+		return CFrame.new(table.unpack(a))
+	elseif t == "Enum" then
+		-- "Enum.Material.Neon" or "Neon": Roblox accepts the item name for enum properties
+		return (tostring(a):match("([^%.]+)$"))
+	elseif t == "BrickColor" then
+		return BrickColor.new(a)
+	elseif t == "nil" then
+		return nil
+	elseif t == "Instance" then
+		if a == nil then
+			return nil
+		end
+		local found = byId[tostring(a)] or findByPath(tostring(a))
+		if not found then
+			error(("%s: instance %s not found"):format(prop, tostring(a)), 0)
+		end
+		return found
+	end
+	error(("%s: unknown value type %s"):format(prop, tostring(t)), 0)
+end
+
+function setProps(inst: Instance, props: any)
+	for prop, value in props do
+		if prop == "Source" then
+			error("Use write_script to change Source.", 0)
+		end
+		local ok, err = pcall(function()
+			(inst :: any)[prop] = decodeValue(prop, value)
+		end)
+		if not ok then
+			error(("Could not set %s: %s"):format(prop, tostring(err)), 0)
+		end
+	end
+end
+
+local COMMON_PROPERTIES = {
+	"Name", "Archivable", "Enabled", "Disabled", "RunContext",
+	"Anchored", "CanCollide", "CanTouch", "CanQuery", "CastShadow", "Massless", "Locked",
+	"Size", "Position", "Orientation", "CFrame", "Color", "BrickColor", "Material", "Transparency",
+	"Reflectance", "Shape", "PrimaryPart", "WorldPivot",
+	"Text", "TextColor3", "TextSize", "TextScaled", "Font", "RichText", "PlaceholderText",
+	"BackgroundColor3", "BackgroundTransparency", "AnchorPoint", "Visible", "ZIndex",
+	"LayoutOrder", "Image", "ImageColor3", "ResetOnSpawn", "ZIndexBehavior", "DisplayOrder",
+	"Value", "MaxValue", "MinValue",
+	"Brightness", "Range", "Angle", "Shadows",
+	"SoundId", "Volume", "Looped", "Playing", "PlaybackSpeed",
+	"WalkSpeed", "JumpPower", "JumpHeight", "Health", "MaxHealth", "DisplayName",
+	"MeshId", "TextureID", "Texture", "Face", "Duration", "ActionText", "ObjectText",
+	"HoldDuration", "MaxActivationDistance", "Adornee", "AlwaysOnTop", "MaxDistance",
+	"TeamColor", "AutoAssignable", "ClockTime", "Ambient", "OutdoorAmbient", "GlobalShadows",
+	"Gravity", "StreamingEnabled", "CharacterAutoLoads", "RespawnTime",
+}
+
+--[=[
+	Reads properties, attributes and tags of an instance. Without a names list it reads a list
+	of common properties and skips the ones the class doesn't have.
+	@within CodeBridge
+	@private
+]=]
+function commands.getProperties(cmd: any)
+	local inst = byId[cmd.id]
+	if not inst then
+		error("Instance not found.", 0)
+	end
+	local names = cmd.names or COMMON_PROPERTIES
+	local props = {}
+	for _, name in names do
+		local ok, value = pcall(function()
+			return (inst :: any)[name]
+		end)
+		local kind = typeof(value)
+		if ok and kind ~= "RBXScriptSignal" and kind ~= "function" then
+			props[name] = encodeValue(value)
+		elseif cmd.names then
+			props[name] = { type = "error", value = "not a property of " .. inst.ClassName }
+		end
+	end
+	local attributes = {}
+	for key, value in inst:GetAttributes() do
+		attributes[key] = encodeValue(value)
+	end
+	return {
+		path = pathOf(inst),
+		className = inst.ClassName,
+		properties = props,
+		attributes = attributes,
+		tags = CollectionService:GetTags(inst),
+	}
+end
+
+--[=[
+	Sets properties, attributes and tags of an instance in one undo step.
+	@within CodeBridge
+	@private
+]=]
+function commands.setProperties(cmd: any)
+	local inst = byId[cmd.id]
+	if not inst then
+		error("Instance not found.", 0)
+	end
+	withRecording("Set properties", function()
+		if cmd.properties then
+			setProps(inst, cmd.properties)
+		end
+		for key, value in cmd.attributes or {} do
+			inst:SetAttribute(key, decodeValue(key, value))
+		end
+		for _, tag in cmd.addTags or {} do
+			CollectionService:AddTag(inst, tag)
+		end
+		for _, tag in cmd.removeTags or {} do
+			CollectionService:RemoveTag(inst, tag)
+		end
+	end)
+	return nil
+end
+
 local function runCommand(cmd)
 	local fn = commands[cmd.type]
 	if not fn then
+		if cmd.reqId then
+			push({ op = "reply", reqId = cmd.reqId, ok = false, error = "Unknown command " .. tostring(cmd.type) })
+		end
 		return
 	end
-	local ok, err = pcall(fn, cmd)
-	if not ok then
-		push({ op = "error", message = tostring(err) })
+	commandError = nil
+	local ok, result = pcall(fn, cmd)
+	local err = if ok then commandError else tostring(result)
+	if cmd.reqId then
+		push({ op = "reply", reqId = cmd.reqId, ok = err == nil, error = err, result = if ok then result else nil })
+	elseif err then
+		push({ op = "error", message = err })
 	end
 end
 
@@ -607,6 +930,7 @@ local function pollLoop(gen)
 				clientId = clientId,
 				placeName = game.Name,
 				placeId = game.PlaceId,
+				pluginVersion = PLUGIN_VERSION,
 			})
 			if gen ~= generation then
 				return

@@ -92,7 +92,7 @@ export default function Home() {
               <img src={useBaseUrl("img/logo.png")} alt="" className={styles.heroLogo} />
               <span className={styles.brandName}>Bloxcode</span>
             </div>
-            <span className={styles.badge}>For Roblox Studio · Windows</span>
+            <a className={styles.badge} href="/docs/claude">New in 1.2: code your game together with Claude →</a>
             <h1 className={styles.title}>
               Write Roblox code
               <br />
@@ -151,6 +151,36 @@ export default function Home() {
             </ul>
           </div>
           <Window src={useBaseUrl("img/explorer.png")} alt="Context menu in the Bloxcode Explorer" className={styles.splitShot} />
+        </section>
+
+        <section className={`${styles.section} ${styles.split} ${styles.splitReverse}`}>
+          <div className={styles.chat} aria-label="Example chat with Claude">
+            <div className={styles.chatUser}>Add a coin system: coins spawn on the map and the count shows in the leaderboard.</div>
+            <div className={styles.chatTools}>
+              <span>get_explorer</span>
+              <span>read_script · ServerScriptService.Main</span>
+              <span>create_instance · ReplicatedStorage.Remotes.CoinCollected</span>
+              <span>create_instance · ServerScriptService.CoinSpawner</span>
+              <span>edit_script · ServerScriptService.Main</span>
+            </div>
+            <div className={styles.chatClaude}>Done. Coins now spawn every 5 seconds and add 1 to <code>leaderstats.Coins</code>. Press Play to try it, then tell me how it went.</div>
+          </div>
+          <div className={styles.splitText}>
+            <span className={styles.eyebrow}>New · Claude</span>
+            <h2>Build your game with Claude.</h2>
+            <p>
+              Connect Claude with one click. Tell it what you want, and it writes the scripts, creates RemoteEvents and GUIs, and installs packages right inside your place, while you watch in Bloxcode.
+            </p>
+            <ul className={styles.checks}>
+              <li>Reads your Explorer and existing code</li>
+              <li>Reads the Output after you play-test and fixes errors</li>
+              <li>Every change is one Ctrl+Z step in Studio</li>
+              <li>Works with Claude Desktop and Claude Code</li>
+            </ul>
+            <a className={`${styles.btn} ${styles.btnGhost}`} href="/docs/claude" style={{ marginTop: 22 }}>
+              How it works
+            </a>
+          </div>
         </section>
 
         <section className={styles.section}>

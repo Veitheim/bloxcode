@@ -24,6 +24,7 @@
 - **Two-way sync:** what you type goes to Studio right away, and changes in Studio show up in Bloxcode. Every change is a Ctrl+Z step in Studio.
 - **Wally packages:** search and install Cmdr, Knit, Promise, Fusion and more with one click, dependencies included.
 - **Luau editor:** Monaco (the editor behind VS Code) with Luau highlighting, snippets and autocomplete that knows your Explorer.
+- **Code with Claude:** connect Claude with one click and it builds features right inside your place: reads the Explorer and scripts, writes code, creates instances, installs packages and reads the Output after you play-test. See [Code with Claude](https://bloxcode-docs.seidl.workers.dev/docs/claude).
 - **Auto updates:** Bloxcode updates itself on startup, like Discord.
 
 ## How it works
@@ -47,6 +48,8 @@ The Studio plugin is the client: it posts Explorer changes to Bloxcode and long-
 | `app/main.js` | Electron main process and the local HTTP bridge |
 | `app/updater.js` | Splash window and auto-updater |
 | `app/packages.js` | Wally registry client, dependency resolution, Rojo-style file conversion |
+| `app/agent.js` | Tools for Claude: Explorer mirror, output log, requests to the plugin, Claude config setup |
+| `app/mcp/bloxcode-mcp.js` | MCP server Claude starts (runs with `Bloxcode.exe` in Node mode, no dependencies) |
 | `app/renderer/` | The editor UI (Monaco, Explorer, tabs, package view) |
 | `studio-plugin/src/CodeBridge.lua` | The Roblox Studio plugin |
 | `studio-plugin/docs`, `pages`, `.moonwave` | Website and docs (Moonwave) |
@@ -67,6 +70,8 @@ Test without Roblox Studio by running a fake Studio that connects to the app:
 ```bash
 node tools/mock-studio.js
 ```
+
+The fake Studio also answers Claude's tool calls. To try the MCP server by hand, point it at the dev copy: `BLOXCODE_PORT=34999 BLOXCODE_KEY_FILE=%APPDATA%/bloxcode-dev/agent-key.txt node app/mcp/bloxcode-mcp.js`.
 
 To run a dev copy next to an installed Bloxcode, give it its own port: `BLOXCODE_PORT=34999 npm start` (and the same for the mock).
 

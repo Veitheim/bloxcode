@@ -28,6 +28,9 @@
       <button class="ab-item" data-view="packages" title="Wally Packages">
         <svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
       </button>
+      <button class="ab-item" data-view="claude" title="Code with Claude">
+        <svg viewBox="0 0 24 24"><path d="M12 2.5l1.9 6.1 6.1 1.9-6.1 1.9-1.9 6.1-1.9-6.1-6.1-1.9 6.1-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      </button>
       <button class="ab-item" data-view="plugin" title="Studio Plugin">
         <svg viewBox="0 0 24 24"><path d="M9 3v4M15 3v4M6 7h12v4a6 6 0 0 1-12 0zM12 17v4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -66,6 +69,11 @@
         </div>
       </section>
 
+      <section id="view-claude" class="view">
+        <header class="view-header"><span>CLAUDE</span></header>
+        <div class="plugin-panel" id="claude-panel"></div>
+      </section>
+
       <section id="view-plugin" class="view">
         <header class="view-header"><span>STUDIO PLUGIN</span></header>
         <div class="plugin-panel" id="plugin-panel"></div>
@@ -99,6 +107,7 @@
     <div class="sb-left">
       <span id="sb-conn" class="sb-item"></span>
       <span id="sb-sync" class="sb-item"></span>
+      <span id="sb-agent" class="sb-item clickable agent" title="Claude is working on your place"></span>
     </div>
     <div class="sb-right">
       <span id="sb-update" class="sb-item clickable update"></span>
