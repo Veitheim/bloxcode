@@ -78,24 +78,47 @@ async function snapshot() {
   await send([{ op: 'reset' }, ...[...nodes.values()].map(ev)]);
 }
 
+const pathOf = (id) => { const p = []; let n = nodes.get(id); while (n) { p.unshift(n.name); n = nodes.get(n.parent); } return p.join('.'); };
+const props = new Map(); // id -> { prop: value }
+
 async function handle(cmd) {
+  let result = null, error = null;
+  try { result = await run(cmd); } catch (e) { error = e.message; }
+  if (cmd.reqId) await send([{ op: 'reply', reqId: cmd.reqId, ok: !error, error, result }]);
+  else if (error) await send([{ op: 'error', message: error }]);
+}
+
+async function run(cmd) {
   console.log('[cmd]', cmd.type, cmd.id || '', cmd.className || '', cmd.name || '');
   const n = nodes.get(cmd.id);
+  if (cmd.id && !n) throw new Error('Instance not found.');
   switch (cmd.type) {
+    case 'read': return { source: n.source || '', path: pathOf(n.id), className: n.cls };
+    case 'search': {
+      const q = cmd.query.toLowerCase(); const matches = [];
+      for (const x of nodes.values()) if (x.source) x.source.split('\n').forEach((l, i) => { if (l.toLowerCase().includes(q)) matches.push({ id: x.id, path: pathOf(x.id), line: i + 1, text: l }); });
+      return { matches, truncated: false };
+    }
+    case 'selection': { const m = [...nodes.values()].find((x) => x.name === 'Main'); return [{ id: m.id, path: pathOf(m.id), className: m.cls }]; }
+    case 'getProperties': return { path: pathOf(n.id), className: n.cls, properties: { Name: n.name, ...(props.get(n.id) || {}) }, attributes: {}, tags: [] };
+    case 'setProperties': props.set(n.id, { ...(props.get(n.id) || {}), ...(cmd.properties || {}) }); return null;
     case 'snapshot': return snapshot();
-    case 'open': return send([{ op: 'open', id: n.id, name: n.name, cls: n.cls, source: n.source || '' }]);
-    case 'setSource': n.source = cmd.source; return;
+    case 'open': await send([{ op: 'open', id: n.id, name: n.name, cls: n.cls, source: n.source || '', agent: cmd.agent }]); return null;
+    case 'setSource': n.source = cmd.source; await send([{ op: 'log', message: `[mock] ${pathOf(n.id)} saved`, kind: 'MessageOutput', context: 'edit' }]); return null;
     case 'create': {
       const src = { Script: 'print("Hello world!")\n', LocalScript: 'print("Hello world!")\n', ModuleScript: 'local module = {}\n\nreturn module\n' }[cmd.className];
-      const id = add(cmd.name, cmd.className, cmd.parentId, src);
+      if (!nodes.has(cmd.parentId)) throw new Error('Target not found.');
+      const source = cmd.source ?? src;
+      const id = add(cmd.name, cmd.className, cmd.parentId, source);
       const c = nodes.get(id);
-      const out = [ev(c), { op: 'created', id, parent: cmd.parentId }];
-      if (src) out.push({ op: 'open', id, name: c.name, cls: c.cls, source: src });
-      return send(out);
+      const out = [ev(c), { op: 'created', id, parent: cmd.parentId, agent: cmd.agent }];
+      if (source != null) out.push({ op: 'open', id, name: c.name, cls: c.cls, source, agent: cmd.agent });
+      await send(out);
+      return { id, path: pathOf(id) };
     }
     case 'rename': n.name = cmd.name; return send([{ op: 'rename', id: n.id, name: n.name }]);
     case 'move': n.parent = cmd.parentId; return send([{ op: 'move', id: n.id, parent: n.parent }]);
-    case 'delete': nodes.delete(n.id); return send([{ op: 'remove', id: n.id }]);
+    case 'delete': nodes.delete(n.id); await send([{ op: 'remove', id: n.id }]); return null;
     case 'select': return;
     case 'wallyInstall': {
       const out = [];
@@ -114,14 +137,17 @@ async function handle(cmd) {
       cmd.entries.forEach((e) => build(e.node, index.id));
       build(cmd.link, folder.id);
       console.log('[wally] installed', cmd.label, out.length, 'instances');
-      return send(out);
+      await send(out);
+      return null;
     }
     default: return;
   }
 }
 
 (async () => {
-  const hello = await req('POST', '/hello', { clientId: client, placeName: 'My Obby', placeId: 0 });
+  const hello = await req('POST', '/hello', { clientId: client, placeName: 'My Obby', placeId: 0, pluginVersion: 2 });
+  // a play-test error, like the play-test copy of the plugin would send
+  setTimeout(() => req('POST', '/log', { logs: [{ message: 'ServerScriptService.Main:21: attempt to index nil with "OnServerEvent"', kind: 'MessageError', context: 'server' }] }), 1000);
   session = hello.session;
   await snapshot();
   console.log('connected, session', session);

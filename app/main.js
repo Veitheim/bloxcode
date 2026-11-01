@@ -10,12 +10,15 @@ const crypto = require('crypto');
 
 const updater = require('./updater');
 const packages = require('./packages');
+const { createAgent, connectClaude, claudeConnectionState } = require('./agent');
 
 // BLOXCODE_PORT lets a dev copy run next to an installed Bloxcode (the plugin always uses 34872).
 const PORT = Number(process.env.BLOXCODE_PORT) || 34872;
 // A dev copy on another port also gets its own profile, so it doesn't collide with the installed app.
 if (process.env.BLOXCODE_PORT) app.setPath('userData', path.join(app.getPath('appData'), 'bloxcode-dev'));
 const POLL_HOLD_MS = 10000;
+
+let agentActivity = null; // { text, time } of Claude's last action
 const CONNECTED_TIMEOUT_MS = 15000;
 
 let win = null;
@@ -30,6 +33,7 @@ const bridge = {
   queue: [],
   waiter: null, // { res, timer }
   serverError: null,
+  pluginVersion: 0,
 };
 
 function isConnected() {
@@ -45,6 +49,8 @@ function statusPayload() {
     plugin: pluginInstallInfo,
     version: app.getVersion(),
     updateReady,
+    claude: claudeState,
+    agentActivity,
   };
 }
 
@@ -130,6 +136,8 @@ const server = http.createServer(async (req, res) => {
       bridge.place = { name: body.placeName || 'Place', id: body.placeId || 0 };
       bridge.lastSeen = Date.now();
       bridge.queue = [];
+      bridge.pluginVersion = Number(body.pluginVersion) || 1;
+      agent.onReset();
       sendEvents([{ op: 'reset' }]);
       sendStatus(true);
       return json(res, 200, { session: bridge.session });
@@ -165,10 +173,29 @@ const server = http.createServer(async (req, res) => {
       if (client !== bridge.activeClient) return json(res, 409, { error: 'inactive' });
       const body = await readBody(req);
       bridge.lastSeen = Date.now();
-      const events = Array.isArray(body.events) ? body.events : [];
+      const events = agent.onEvents(Array.isArray(body.events) ? body.events : []);
       sendEvents(events);
       if (events.some((e) => e.op === 'open' && e.focus)) focusWindow();
       return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/log') {
+      // output from play-test sessions (they don't take part in the poll loop)
+      const body = await readBody(req);
+      agent.onLogs(body.logs);
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/agent') {
+      // Claude, through the MCP server. Browsers send an Origin header; the MCP server doesn't.
+      if (req.headers.origin || !agent.checkToken(req.headers.authorization)) return json(res, 403, { error: 'Forbidden' });
+      const body = await readBody(req);
+      try {
+        const result = await agent.call(String(body.tool || ''), body.args);
+        return json(res, 200, { result });
+      } catch (err) {
+        return json(res, 200, { error: String(err && err.message || err) });
+      }
     }
 
     if (req.method === 'POST' && url.pathname === '/bye') {
@@ -194,6 +221,38 @@ server.on('error', (err) => {
 });
 
 setInterval(() => sendStatus(), 2000);
+
+// ---------- Claude (MCP) ----------
+const agent = createAgent({
+  pushCommand: (cmd) => pushCommand(cmd),
+  sendEvents: (events) => sendEvents(events),
+  isConnected: () => isConnected(),
+  getPlace: () => bridge.place,
+  getPluginVersion: () => (isConnected() ? bridge.pluginVersion : 0),
+  packages,
+  userData: app.getPath('userData'),
+  onActivity: (text) => {
+    agentActivity = { text, time: Date.now() };
+    sendEvents([{ op: 'agent', text }]);
+    sendStatus(true);
+  },
+});
+
+let claudeState = { desktop: false, code: false };
+function refreshClaudeState() {
+  try { claudeState = claudeConnectionState(); } catch (_) {}
+}
+
+function mcpServerConfig() {
+  const script = app.isPackaged
+    ? path.join(process.resourcesPath, 'mcp', 'bloxcode-mcp.js')
+    : path.join(__dirname, 'mcp', 'bloxcode-mcp.js');
+  return {
+    command: process.execPath,
+    args: [script],
+    env: { ELECTRON_RUN_AS_NODE: '1', BLOXCODE_PORT: String(PORT), BLOXCODE_KEY_FILE: agent.tokenFile },
+  };
+}
 
 // ---------- Studio plugin install ----------
 let pluginInstallInfo = { installed: false, path: null, error: null, updated: false };
@@ -289,6 +348,12 @@ ipcMain.handle('packages:install', async (_e, spec) => {
   pushCommand(command);
   return summary;
 });
+ipcMain.handle('claude:connect', () => {
+  const r = connectClaude(mcpServerConfig());
+  refreshClaudeState();
+  sendStatus(true);
+  return r;
+});
 ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(String(text)));
 ipcMain.on('window:titleColor', (_e, colors) => {
   try { win && win.setTitleBarOverlay(colors); } catch (_) {}
@@ -301,6 +366,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     const splash = await updater.runStartupUpdate();
     installPlugin();
+    refreshClaudeState();
     server.listen(PORT, '127.0.0.1');
     createWindow(splash);
     updater.startBackgroundChecks((version) => {

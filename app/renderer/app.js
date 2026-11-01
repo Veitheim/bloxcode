@@ -568,12 +568,16 @@ function handleOpenEvent(e) {
     const insertAt = activeId ? tabOrder.indexOf(activeId) + 1 : tabOrder.length;
     tabOrder.splice(insertAt, 0, e.id);
   }
+  // Claude opens what it edits, but doesn't pull the tab away while you are typing.
+  if (e.agent && activeId && activeId !== e.id && Date.now() - lastTyped < 5000) { scheduleRender(); return; }
   activate(e.id);
   if (tree.nodes.has(e.id)) select(e.id, true);
 }
 
+let lastTyped = 0;
 function onLocalEdit(doc) {
   if (doc.applying) return;
+  lastTyped = Date.now();
   doc.dirty = doc.model.getValue() !== doc.lastSynced;
   scheduleRender();
   if (autoSync) {
@@ -739,6 +743,7 @@ function renderStatus() {
     : '<span class="pill warn"><span class="dot"></span>Waiting for Roblox Studio</span>';
   $('#sb-update').textContent = status.updateReady ? `⟳ Update ${status.updateReady} ready · Restart` : '';
   renderPluginPanel();
+  renderClaudePanel();
   renderEmptyState();
 }
 
@@ -770,6 +775,76 @@ $('#plugin-panel').addEventListener('click', async (e) => {
     const r = await bridge.installPlugin();
     toast(r.installed ? (r.updated ? 'Plugin installed. Please restart Studio.' : 'Plugin is already up to date.') : 'Error: ' + r.error, r.installed ? 'info' : 'error');
   } else if (b.dataset.plugin === 'folder') bridge.openPluginFolder();
+});
+
+// =====================================================================
+// Claude
+// =====================================================================
+const STARTER_PROMPT = `You are my Roblox developer. You are connected to my open Roblox Studio place through Bloxcode (the "bloxcode" MCP tools).
+
+How to work:
+1. Call get_status. If Studio is not connected, tell me what to do.
+2. Call get_explorer to learn how my game is organized, and read the scripts that matter before you change anything.
+3. Make changes directly with the Bloxcode tools (create_instance, write_script, edit_script, set_properties, install_package). Don't paste code into the chat for me to copy.
+4. Server code goes in ServerScriptService, client code in StarterPlayerScripts or StarterGui, shared modules and RemoteEvents in ReplicatedStorage. Never trust the client.
+5. Write clean, modern Luau (task library, GetService, types where useful) and follow the style already in my game.
+6. When something needs testing, tell me to press Play, then read the errors with get_output and fix them.
+7. Ask before deleting or rewriting big parts of the game. At the end, give me a short summary of what you changed.
+
+My first task: `;
+
+const agentLog = [];
+let agentTimer = null;
+function onAgentActivity(text) {
+  agentLog.unshift({ text, time: new Date() });
+  agentLog.length = Math.min(agentLog.length, 30);
+  const el = $('#sb-agent');
+  el.textContent = 'Claude: ' + text;
+  el.classList.add('live');
+  clearTimeout(agentTimer);
+  agentTimer = setTimeout(() => el.classList.remove('live'), 4000);
+  renderClaudePanel();
+}
+$('#sb-agent').addEventListener('click', () => showView('claude'));
+
+function renderClaudePanel() {
+  const c = status.claude || {};
+  const linked = c.desktop || c.code;
+  const time = (d) => d.toTimeString().slice(0, 5);
+  $('#claude-panel').innerHTML = `
+    <p>Let Claude build your game with you. Claude reads your Explorer and scripts, writes code, creates RemoteEvents and GUIs, installs Wally packages and reads the Output after you play-test. You watch every change live here.</p>
+    <h3>1. Connect Claude</h3>
+    <p>${linked
+      ? `<span class="pill ok"><span class="dot"></span>Set up for ${[c.desktop && 'Claude Desktop', c.code && 'Claude Code'].filter(Boolean).join(' and ')}</span>`
+      : '<span class="pill warn"><span class="dot"></span>Not connected yet</span>'}</p>
+    <button class="primary" data-claude="connect">${linked ? 'Connect again' : 'Connect Claude'}</button>
+    <p>Adds Bloxcode to Claude Desktop and Claude Code on this PC. Restart Claude afterwards.</p>
+    <h3>2. Start a chat</h3>
+    <p>Keep Studio (with Code Mode on) and Bloxcode open. Start a new chat with Claude, paste this prompt and add your task:</p>
+    <div class="claude-prompt">${esc(STARTER_PROMPT)}…</div>
+    <button class="secondary" data-claude="copy">Copy prompt</button>
+    <button class="secondary" data-claude="docs">How it works</button>
+    <h3>Activity</h3>
+    ${agentLog.length
+      ? `<ul class="claude-log">${agentLog.map((a) => `<li><span>${time(a.time)}</span>${esc(a.text)}</li>`).join('')}</ul>`
+      : '<p>Nothing yet. Claude\'s changes show up here.</p>'}
+    <p>Status: ${status.connected ? '<span class="claude-ok">Studio connected</span>' : 'Studio not connected'}</p>`;
+}
+$('#claude-panel').addEventListener('click', async (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.claude === 'connect') {
+    try {
+      const r = await bridge.connectClaude();
+      if (r.done.length) toast(`Connected: ${[...new Set(r.done.map((d) => d.app))].join(' and ')}. Restart Claude to load Bloxcode.`);
+      if (r.errors.length) toast(r.errors.join(' '), 'error');
+    } catch (err) { toast('Error: ' + err.message, 'error'); }
+  } else if (b.dataset.claude === 'copy') {
+    bridge.copy(STARTER_PROMPT);
+    toast('Prompt copied. Paste it into a new Claude chat and add your task.');
+  } else if (b.dataset.claude === 'docs') {
+    window.open('https://bloxcode-docs.seidl.workers.dev/docs/claude');
+  }
 });
 
 function toast(text, kind) {
@@ -889,6 +964,8 @@ function handleEvents(events) {
         toast('Studio: ' + e.message, 'error'); break;
       case 'info':
         toast(e.message); break;
+      case 'agent':
+        onAgentActivity(e.text); break;
       default: break;
     }
   }

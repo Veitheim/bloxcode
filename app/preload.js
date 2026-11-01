@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('bridge', {
   searchPackages: (query) => ipcRenderer.invoke('packages:search', query),
   installPackage: (spec) => ipcRenderer.invoke('packages:install', spec),
   onPackageProgress: (cb) => ipcRenderer.on('packages:progress', (_e, p) => cb(p)),
+  connectClaude: () => ipcRenderer.invoke('claude:connect'),
 });
