@@ -1,5 +1,7 @@
 title = "Bloxcode"
 changelog = false
+gitRepoUrl = "https://github.com/Veitheim/bloxcode"
+gitSourceBranch = "main"
 
 [docusaurus]
 url = "https://bloxcode-docs.seidl.workers.dev"
@@ -62,6 +64,21 @@ to = "/api/Protocol"
 [[footer.links.items]]
 label = "Troubleshooting"
 to = "/docs/troubleshooting"
+
+[[footer.links]]
+title = "Community"
+
+[[footer.links.items]]
+label = "GitHub"
+href = "https://github.com/Veitheim/bloxcode"
+
+[[footer.links.items]]
+label = "Report a bug"
+href = "https://github.com/Veitheim/bloxcode/issues"
+
+[[footer.links.items]]
+label = "Wally"
+href = "https://wally.run"
 
 [[classOrder]]
 section = "Studio Plugin"

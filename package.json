@@ -9,7 +9,7 @@
     "start": "electron .",
     "icon": "node tools/make-icon.js",
     "dist": "electron-builder --win nsis",
-    "docs:build": "cd studio-plugin && npx moonwave build --code src",
+    "docs:build": "cd studio-plugin && npx moonwave build --code src && cd .. && node tools/fix-docs-links.js",
     "docs:deploy": "cd studio-plugin && npx wrangler deploy",
     "release": "node tools/release.js"
   },
