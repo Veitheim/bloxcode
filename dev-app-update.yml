@@ -1,0 +1,3 @@
+provider: generic
+url: https://bloxcode-docs.seidl.workers.dev/updates
+updaterCacheDirName: bloxcode-updater

@@ -1,0 +1,64 @@
+{
+  "name": "bloxcode",
+  "version": "1.1.0",
+  "description": "External code editor for Roblox Studio",
+  "main": "app/main.js",
+  "author": "Veitheim",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "icon": "node tools/make-icon.js",
+    "dist": "electron-builder --win nsis",
+    "docs:build": "cd studio-plugin && npx moonwave build --code src",
+    "docs:deploy": "cd studio-plugin && npx wrangler deploy",
+    "release": "node tools/release.js"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11",
+    "fflate": "^0.8.3",
+    "monaco-editor": "0.52.2"
+  },
+  "build": {
+    "appId": "dev.schroll.bloxcode",
+    "productName": "Bloxcode",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "app/**/*",
+      "package.json",
+      "!node_modules/monaco-editor/esm/**",
+      "!node_modules/monaco-editor/dev/**",
+      "!node_modules/monaco-editor/min-maps/**"
+    ],
+    "extraResources": [
+      {
+        "from": "studio-plugin/src/CodeBridge.lua",
+        "to": "studio-plugin/CodeBridge.lua"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Bloxcode",
+      "runAfterFinish": true,
+      "artifactName": "Bloxcode-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://bloxcode-docs.seidl.workers.dev/updates"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  }
+}

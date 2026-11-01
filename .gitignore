@@ -1,0 +1,8 @@
+node_modules/
+dist/
+studio-plugin/build/
+studio-plugin/.moonwave/*
+!studio-plugin/.moonwave/custom.css
+!studio-plugin/.moonwave/static/
+studio-plugin/.wrangler/
+.wrangler/

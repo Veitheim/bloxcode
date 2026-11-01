@@ -1,0 +1,68 @@
+title = "Bloxcode"
+changelog = false
+
+[docusaurus]
+url = "https://bloxcode-docs.seidl.workers.dev"
+baseUrl = "/"
+tagline = "The external code editor for Roblox Studio"
+favicon = "img/logo.png"
+
+[navbar]
+title = "Bloxcode"
+hideOnScroll = false
+
+[navbar.logo]
+alt = "Bloxcode"
+src = "img/logo.png"
+
+[[navbar.items]]
+to = "/docs/packages"
+label = "Packages"
+position = "left"
+
+[[navbar.items]]
+to = "/docs/troubleshooting"
+label = "Help"
+position = "right"
+
+[footer]
+style = "dark"
+copyright = "Bloxcode · Built with Moonwave · Hosted on Cloudflare Workers"
+
+[[footer.links]]
+title = "Docs"
+
+[[footer.links.items]]
+label = "Getting Started"
+to = "/docs/intro"
+
+[[footer.links.items]]
+label = "Explorer & Sync"
+to = "/docs/explorer"
+
+[[footer.links.items]]
+label = "Wally Packages"
+to = "/docs/packages"
+
+[[footer.links.items]]
+label = "Keyboard Shortcuts"
+to = "/docs/shortcuts"
+
+[[footer.links]]
+title = "Reference"
+
+[[footer.links.items]]
+label = "CodeBridge (Plugin)"
+to = "/api/CodeBridge"
+
+[[footer.links.items]]
+label = "Protocol (HTTP)"
+to = "/api/Protocol"
+
+[[footer.links.items]]
+label = "Troubleshooting"
+to = "/docs/troubleshooting"
+
+[[classOrder]]
+section = "Studio Plugin"
+classes = ["CodeBridge", "Protocol"]

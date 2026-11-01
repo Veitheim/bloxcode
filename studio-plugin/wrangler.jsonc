@@ -1,0 +1,18 @@
+// Bloxcode website + update server on Cloudflare Workers.
+// Build the docs:  npx moonwave build --code src
+// Deploy:          npx wrangler deploy
+{
+  "name": "bloxcode-docs",
+  "main": "worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./build",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash",
+    "run_worker_first": ["/updates/*", "/download", "/download/"]
+  },
+  "r2_buckets": [
+    { "binding": "RELEASES", "bucket_name": "bloxcode-releases" }
+  ]
+}
