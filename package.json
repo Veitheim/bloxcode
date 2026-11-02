@@ -9,9 +9,11 @@
     "start": "electron .",
     "icon": "node tools/make-icon.js",
     "dist": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac --universal",
     "docs:build": "cd studio-plugin && npx moonwave build --code src && cd .. && node tools/fix-docs-links.js",
     "docs:deploy": "cd studio-plugin && npx wrangler deploy",
-    "release": "node tools/release.js"
+    "release": "node tools/release.js",
+    "release:mac": "node tools/release.js --mac"
   },
   "dependencies": {
     "electron-updater": "^6.8.11",
@@ -55,6 +57,21 @@
       "runAfterFinish": true,
       "artifactName": "Bloxcode-Setup-${version}.${ext}",
       "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon-mac.png",
+      "category": "public.app-category.developer-tools",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "artifactName": "Bloxcode-${version}-mac.${ext}"
+    },
+    "dmg": {
+      "title": "Bloxcode ${version}",
+      "artifactName": "Bloxcode-${version}-mac.${ext}"
     },
     "publish": {
       "provider": "generic",

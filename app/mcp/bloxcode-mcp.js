@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 
 const PORT = Number(process.env.BLOXCODE_PORT) || 34872;
-const KEY_FILE = process.env.BLOXCODE_KEY_FILE || path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Bloxcode', 'agent-key.txt');
+const KEY_FILE = process.env.BLOXCODE_KEY_FILE || path.join(process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Bloxcode', 'agent-key.txt');
 const VERSION = '1.2.0';
 
 const INSTRUCTIONS = `You are connected to Bloxcode, an external code editor that is live-synced with the user's open Roblox Studio place.

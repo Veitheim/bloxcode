@@ -2,7 +2,7 @@
 // Runs a small HTTP server on localhost that the Roblox Studio plugin talks to,
 // and forwards everything to the editor window over IPC.
 
-const { app, BrowserWindow, ipcMain, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard, Menu } = require('electron');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const updater = require('./updater');
 const packages = require('./packages');
 const { createAgent, connectClaude, claudeConnectionState } = require('./agent');
+const { isMac, robloxPluginsDir } = require('./platform');
 
 // BLOXCODE_PORT lets a dev copy run next to an installed Bloxcode (the plugin always uses 34872).
 const PORT = Number(process.env.BLOXCODE_PORT) || 34872;
@@ -49,6 +50,7 @@ function statusPayload() {
     plugin: pluginInstallInfo,
     version: app.getVersion(),
     updateReady,
+    platform: process.platform,
     claude: claudeState,
     agentActivity,
   };
@@ -265,7 +267,7 @@ function pluginSourcePath() {
 
 function installPlugin() {
   try {
-    const dir = path.join(process.env.LOCALAPPDATA || '', 'Roblox', 'Plugins');
+    const dir = robloxPluginsDir();
     const target = path.join(dir, 'BloxcodeBridge.lua');
     const src = fs.readFileSync(pluginSourcePath(), 'utf8');
     fs.mkdirSync(dir, { recursive: true });
@@ -281,6 +283,15 @@ function installPlugin() {
 }
 
 // ---------- window ----------
+// macOS needs an app menu for Cmd+C/V/Z/Q to work. Cmd+W, Cmd+P etc. stay free for the editor.
+function setMacMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'appMenu' },
+    { role: 'editMenu' },
+    { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
+  ]));
+}
+
 function createWindow(splash) {
   win = new BrowserWindow({
     show: false,
@@ -292,14 +303,18 @@ function createWindow(splash) {
     title: 'Bloxcode',
     icon: path.join(__dirname, 'icon.png'),
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#1f1f1f', symbolColor: '#cccccc', height: 34 },
+    // Windows draws its own min/max/close buttons; macOS keeps the traffic lights on the left.
+    ...(isMac
+      ? { trafficLightPosition: { x: 12, y: 10 } }
+      : { titleBarOverlay: { color: '#1f1f1f', symbolColor: '#cccccc', height: 34 } }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  win.removeMenu();
+  if (isMac) setMacMenu();
+  else win.removeMenu();
   win.once('ready-to-show', () => {
     win.show();
     if (splash && !splash.isDestroyed()) splash.close();
@@ -313,7 +328,7 @@ function createWindow(splash) {
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F12') win.webContents.toggleDevTools();
-    if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'r' && input.shift) win.reload();
+    if (input.type === 'keyDown' && (input.control || input.meta) && input.key.toLowerCase() === 'r' && input.shift) win.reload();
   });
   win.on('closed', () => { win = null; });
 
@@ -335,7 +350,7 @@ ipcMain.on('bridge:command', (_e, cmd) => {
 ipcMain.handle('bridge:getStatus', () => statusPayload());
 ipcMain.handle('plugin:install', () => { const r = installPlugin(); sendStatus(true); return r; });
 ipcMain.handle('plugin:openFolder', () => {
-  const dir = path.join(process.env.LOCALAPPDATA || '', 'Roblox', 'Plugins');
+  const dir = robloxPluginsDir();
   return shell.openPath(dir);
 });
 ipcMain.on('app:restartToUpdate', () => updater.restartToUpdate());
@@ -356,6 +371,7 @@ ipcMain.handle('claude:connect', () => {
 });
 ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(String(text)));
 ipcMain.on('window:titleColor', (_e, colors) => {
+  if (isMac) return;
   try { win && win.setTitleBarOverlay(colors); } catch (_) {}
 });
 

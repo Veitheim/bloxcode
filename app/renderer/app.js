@@ -4,6 +4,18 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// macOS: Cmd instead of Ctrl (Ctrl+Tab stays, Cmd+Tab belongs to the system).
+const IS_MAC = bridge.platform === 'darwin';
+const MOD = IS_MAC ? '⌘' : 'Ctrl';
+if (IS_MAC) {
+  document.body.classList.add('mac');
+  for (const el of document.querySelectorAll('kbd')) {
+    if (el.textContent === 'Ctrl' && el.nextElementSibling?.textContent !== 'Tab') el.textContent = '⌘';
+    else if (el.textContent.startsWith('Ctrl+')) el.textContent = el.textContent.replace('Ctrl+', '⌘');
+  }
+  for (const el of document.querySelectorAll('[title*="Ctrl+"]')) el.title = el.title.replace('Ctrl+Shift+', '⇧⌘').replace('Ctrl+', '⌘');
+}
+
 const ROW_H = 22;
 const SERVICE_ORDER = ['Workspace', 'Players', 'Lighting', 'MaterialService', 'ReplicatedFirst', 'ReplicatedStorage',
   'ServerScriptService', 'ServerStorage', 'StarterGui', 'StarterPack', 'StarterPlayer', 'Teams', 'SoundService',
@@ -497,7 +509,7 @@ function confirmDelete(n) {
   if (!n.parent || !requireConnection()) return;
   const count = (function countAll(x) { let c = 1; x.children.forEach((id) => { const k = tree.nodes.get(id); if (k) c += countAll(k); }); return c; })(n);
   const extra = count > 1 ? ` and ${count - 1} objects inside it` : '';
-  if (confirm(`Delete "${n.name}"${extra}?\n\nYou can undo this in Studio with Ctrl+Z.`)) {
+  if (confirm(`Delete "${n.name}"${extra}?\n\nYou can undo this in Studio with ${MOD}+Z.`)) {
     bridge.send({ type: 'delete', id: n.id });
   }
 }
@@ -681,7 +693,7 @@ tabsEl.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   const id = tab.dataset.id;
   showMenu([
-    { label: 'Close', key: 'Ctrl+W', run: () => closeDoc(id) },
+    { label: 'Close', key: `${MOD}+W`, run: () => closeDoc(id) },
     { label: 'Close Others', run: () => tabOrder.filter((t) => t !== id).forEach(closeDoc) },
     { label: 'Close All', run: () => [...tabOrder].forEach(closeDoc) },
     '-',
@@ -741,7 +753,8 @@ function renderStatus() {
   $('#welcome-status').innerHTML = status.connected
     ? `<span class="pill ok"><span class="dot"></span>Connected to ${esc(status.place ? status.place.name : 'Studio')}</span>`
     : '<span class="pill warn"><span class="dot"></span>Waiting for Roblox Studio</span>';
-  $('#sb-update').textContent = status.updateReady ? `⟳ Update ${status.updateReady} ready · Restart` : '';
+  $('#sb-update').textContent = !status.updateReady ? ''
+    : IS_MAC ? `⟳ Bloxcode ${status.updateReady} is out · Download` : `⟳ Update ${status.updateReady} ready · Restart`;
   renderPluginPanel();
   renderClaudePanel();
   renderEmptyState();
@@ -861,7 +874,7 @@ $('#sb-autosync').addEventListener('click', () => {
   autoSync = !autoSync;
   saveSetting('autoSync', autoSync);
   renderStatus();
-  toast(autoSync ? 'Auto Sync on: changes go to Studio right away.' : 'Auto Sync off: press Ctrl+S to send to Studio.');
+  toast(autoSync ? 'Auto Sync on: changes go to Studio right away.' : `Auto Sync off: press ${MOD}+S to send to Studio.`);
 });
 
 // =====================================================================
@@ -1101,7 +1114,7 @@ $('#view-packages').addEventListener('click', async (e) => {
   } else if (remove) {
     if (!requireConnection()) return;
     const linkNode = tree.nodes.get(remove.dataset.pkgRemove);
-    if (!linkNode || !confirm(`Remove ${linkNode.name} from your place?\n\nYou can undo this in Studio with Ctrl+Z.`)) return;
+    if (!linkNode || !confirm(`Remove ${linkNode.name} from your place?\n\nYou can undo this in Studio with ${MOD}+Z.`)) return;
     bridge.send({ type: 'delete', id: remove.dataset.pkgRemove });
     if (remove.dataset.pkgIndex) bridge.send({ type: 'delete', id: remove.dataset.pkgIndex });
   }

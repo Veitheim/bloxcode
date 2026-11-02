@@ -3,6 +3,10 @@ sidebar_position: 5
 title: Keyboard Shortcuts
 ---
 
+:::tip On Mac
+Use <kbd>⌘</kbd> wherever this page says <kbd>Ctrl</kbd>. The one exception is <kbd>Ctrl</kbd> + <kbd>Tab</kbd> for the next tab, because <kbd>⌘</kbd> + <kbd>Tab</kbd> switches apps.
+:::
+
 ## General
 
 | Shortcut | Action |

@@ -109,6 +109,8 @@
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s;
 }
 .btn svg { width: 16px; height: 16px; }
+.altDownload { margin: 14px 0 0; font-size: 14px; color: var(--ifm-color-emphasis-600); }
+.altDownload a { font-weight: 600; }
 .btn:hover { text-decoration: none; transform: translateY(-1px); }
 .btnPrimary {
   background: linear-gradient(135deg, #2f7cf6, #6b5cff);
