@@ -10,7 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://bloxcode-docs.seidl.workers.dev/download"><b>Download for Windows</b></a> ·
+  <a href="https://bloxcode-docs.seidl.workers.dev/download/windows"><b>Download for Windows</b></a> ·
+  <a href="https://bloxcode-docs.seidl.workers.dev/download/mac"><b>Download for Mac</b></a> ·
   <a href="https://bloxcode-docs.seidl.workers.dev/docs/intro">Getting started</a> ·
   <a href="https://bloxcode-docs.seidl.workers.dev">Website</a>
 </p>
@@ -21,7 +22,7 @@
 
 - **Code Mode:** turn it on in the Studio plugin and every script you open in Studio opens in Bloxcode instead.
 - **Live Explorer:** Workspace, ServerScriptService, ReplicatedStorage, StarterGui and more, mirrored in real time. Create, rename, move (drag & drop), duplicate and delete objects.
-- **Two-way sync:** what you type goes to Studio right away, and changes in Studio show up in Bloxcode. Every change is a Ctrl+Z step in Studio.
+- **Two-way sync:** what you type goes to Studio right away, and changes in Studio show up in Bloxcode. Every change is one undo step in Studio.
 - **Wally packages:** search and install Cmdr, Knit, Promise, Fusion and more with one click, dependencies included.
 - **Luau editor:** Monaco (the editor behind VS Code) with Luau highlighting, snippets and autocomplete that knows your Explorer.
 - **Code with Claude:** connect Claude with one click and it builds features right inside your place: reads the Explorer and scripts, writes code, creates instances, installs packages and reads the Output after you play-test. See [Code with Claude](https://bloxcode-docs.seidl.workers.dev/docs/claude).
@@ -49,7 +50,7 @@ The Studio plugin is the client: it posts Explorer changes to Bloxcode and long-
 | `app/updater.js` | Splash window and auto-updater |
 | `app/packages.js` | Wally registry client, dependency resolution, Rojo-style file conversion |
 | `app/agent.js` | Tools for Claude: Explorer mirror, output log, requests to the plugin, Claude config setup |
-| `app/mcp/bloxcode-mcp.js` | MCP server Claude starts (runs with `Bloxcode.exe` in Node mode, no dependencies) |
+| `app/mcp/bloxcode-mcp.js` | MCP server Claude starts (runs with the Bloxcode executable in Node mode, no dependencies) |
 | `app/renderer/` | The editor UI (Monaco, Explorer, tabs, package view) |
 | `studio-plugin/src/CodeBridge.lua` | The Roblox Studio plugin |
 | `studio-plugin/docs`, `pages`, `.moonwave` | Website and docs (Moonwave) |
@@ -58,7 +59,7 @@ The Studio plugin is the client: it posts Explorer changes to Bloxcode and long-
 
 ## Development
 
-Requires Node.js 20+ on Windows.
+Requires Node.js 20+ on Windows or macOS. Build the Mac app with `npm run dist:mac` (universal: Apple Silicon + Intel). On a Mac, build outside `~/Documents`, for example `npx electron-builder --mac --universal -c.directories.output=/tmp/bloxcode-dist`, because Finder metadata there breaks code signing. Publish with `BLOXCODE_DIST=/tmp/bloxcode-dist npm run release:mac`.
 
 ```bash
 npm install

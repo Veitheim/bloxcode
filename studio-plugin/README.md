@@ -5,7 +5,7 @@ Bloxcode is an external code editor for Roblox Studio, built on Monaco (the edit
 ## Install
 
 1. [Download the installer](https://bloxcode-docs.seidl.workers.dev/download) and run it.
-2. Start Bloxcode. The Studio plugin is copied to `%LOCALAPPDATA%\Roblox\Plugins\BloxcodeBridge.lua` automatically.
+2. Start Bloxcode. The Studio plugin is copied to `%LOCALAPPDATA%\Roblox\Plugins\BloxcodeBridge.lua` (Windows) or `~/Documents/Roblox/Plugins/BloxcodeBridge.lua` (Mac) automatically.
 3. Restart Roblox Studio.
 4. **Plugins** tab → **Bloxcode** → turn on **Code Mode**.
 5. The first time, allow **HTTP requests to localhost** and **Script Injection**.

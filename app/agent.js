@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { isMac, appDataDir } = require('./platform');
 
 const REQUIRED_PLUGIN_VERSION = 2;
 const REPLY_TIMEOUT_MS = 20000;
@@ -402,18 +403,19 @@ function writeJson(file, data) {
 
 function claudeDesktopConfigFiles() {
   const files = [];
-  const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-  const local = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
-  // Microsoft Store version keeps its data in a package folder
-  try {
-    for (const d of fs.readdirSync(path.join(local, 'Packages'))) {
-      if (/^Claude_/i.test(d)) {
-        const dir = path.join(local, 'Packages', d, 'LocalCache', 'Roaming', 'Claude');
-        if (fs.existsSync(dir)) files.push(path.join(dir, 'claude_desktop_config.json'));
+  if (!isMac) {
+    const local = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    // Microsoft Store version keeps its data in a package folder
+    try {
+      for (const d of fs.readdirSync(path.join(local, 'Packages'))) {
+        if (/^Claude_/i.test(d)) {
+          const dir = path.join(local, 'Packages', d, 'LocalCache', 'Roaming', 'Claude');
+          if (fs.existsSync(dir)) files.push(path.join(dir, 'claude_desktop_config.json'));
+        }
       }
-    }
-  } catch (_) {}
-  files.push(path.join(appData, 'Claude', 'claude_desktop_config.json'));
+    } catch (_) {}
+  }
+  files.push(path.join(appDataDir(), 'Claude', 'claude_desktop_config.json'));
   return files;
 }
 

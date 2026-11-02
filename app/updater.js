@@ -2,12 +2,16 @@
 // downloads and installs them, then restarts Bloxcode. While the app runs,
 // it checks again every few hours and offers a restart when an update is ready.
 
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 
 const CHECK_TIMEOUT_MS = 10000;
 const BACKGROUND_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const MIN_SPLASH_MS = 1200;
+// macOS builds are not code-signed, so they can't install updates themselves.
+// They check the feed and point the user to the new download instead.
+const IS_MAC = process.platform === 'darwin';
+const MAC_DOWNLOAD_URL = 'https://bloxcode-docs.seidl.workers.dev/download/mac';
 
 // BLOXCODE_UPDATE_TEST=<fakeVersion> runs the updater in dev against the live feed,
 // pretending to be <fakeVersion>. It downloads but never installs.
@@ -83,7 +87,7 @@ async function runStartupUpdate() {
   await new Promise((r) => splash.webContents.once('did-finish-load', r));
   splash.webContents.executeJavaScript(`window.setVersion(${JSON.stringify(app.getVersion())})`).catch(() => {});
 
-  if (updatesEnabled()) {
+  if (updatesEnabled() && !IS_MAC) {
     const updater = getUpdater();
     setSplash(splash, 'Checking for updates…');
     try {
@@ -124,9 +128,25 @@ async function runStartupUpdate() {
   return splash;
 }
 
-/** Background checks while the app is open. onReady(version) fires when an update is downloaded. */
+/** macOS: checks now and every few hours. onAvailable(version) fires when a newer version is out. */
+function startMacChecks(onAvailable) {
+  const updater = getUpdater();
+  const check = async () => {
+    try {
+      const result = await updater.checkForUpdates();
+      if (result && result.isUpdateAvailable) onAvailable(result.updateInfo.version);
+    } catch (_) { /* offline – try again later */ }
+  };
+  check();
+  setInterval(check, BACKGROUND_INTERVAL_MS);
+}
+
+/** Background checks while the app is open. onReady(version) fires when an update is downloaded (Windows)
+ *  or found (macOS). */
 function startBackgroundChecks(onReady) {
-  if (!updatesEnabled() || TEST_VERSION) return;
+  if (!updatesEnabled()) return;
+  if (IS_MAC) return startMacChecks(onReady);
+  if (TEST_VERSION) return;
   const updater = getUpdater();
   updater.on('update-downloaded', (info) => onReady(info.version));
   const check = async () => {
@@ -139,6 +159,7 @@ function startBackgroundChecks(onReady) {
 }
 
 function restartToUpdate() {
+  if (IS_MAC) { shell.openExternal(MAC_DOWNLOAD_URL); return; }
   if (!autoUpdater) return;
   autoUpdater.quitAndInstall(true, true);
 }

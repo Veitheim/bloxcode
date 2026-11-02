@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect, useState } from "react"
 import Layout from "@theme/Layout"
 import Link from "@docusaurus/Link"
 import useBaseUrl from "@docusaurus/useBaseUrl"
@@ -28,7 +28,7 @@ const FEATURES = [
   },
   {
     title: "Two-way sync",
-    text: "What you type is in Studio right away. What happens in Studio shows up here. Everything can be undone with Ctrl+Z.",
+    text: "What you type is in Studio right away. What happens in Studio shows up here. Everything can be undone in Studio.",
     icon: "M4 9h13l-3-3M20 15H7l3 3",
   },
   {
@@ -38,7 +38,7 @@ const FEATURES = [
   },
   {
     title: "Always up to date",
-    text: "Bloxcode updates itself on startup, just like Discord. No reinstalling, ever.",
+    text: "On Windows, Bloxcode updates itself on startup, just like Discord. On Mac, it tells you as soon as a new version is out.",
     icon: "M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5",
   },
 ]
@@ -46,7 +46,7 @@ const FEATURES = [
 const STEPS = [
   {
     title: "Install",
-    text: "Run the Bloxcode installer. The Studio plugin is set up automatically on first launch.",
+    text: "Run the installer on Windows, or drag Bloxcode into Applications on Mac. The Studio plugin is set up automatically on first launch.",
   },
   {
     title: "Turn on Code Mode",
@@ -59,13 +59,32 @@ const STEPS = [
 ]
 
 const SHORTCUTS = [
-  [["Ctrl", "P"], "Find & open a script"],
-  [["Ctrl", "S"], "Send to Studio now"],
-  [["Ctrl", "W"], "Close tab"],
+  [["Mod", "P"], "Find & open a script"],
+  [["Mod", "S"], "Send to Studio now"],
+  [["Mod", "W"], "Close tab"],
   [["Ctrl", "Tab"], "Next tab"],
   [["F2"], "Rename"],
   [["Del"], "Delete"],
 ]
+
+const PLATFORMS = {
+  windows: { label: "Windows", href: "/download/windows" },
+  mac: { label: "macOS", href: "/download/mac" },
+}
+
+// Picks the right download for the visitor. Server render shows Windows, the browser corrects it.
+function usePlatform() {
+  const [platform, setPlatform] = useState("windows")
+  useEffect(() => {
+    const ua = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent
+    if (/mac/i.test(ua)) setPlatform("mac")
+  }, [])
+  return platform
+}
+
+const DOWNLOAD_ICON = (
+  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+)
 
 function Window({ src, alt, className }) {
   return (
@@ -81,6 +100,10 @@ function Window({ src, alt, className }) {
 }
 
 export default function Home() {
+  const platform = usePlatform()
+  const main = PLATFORMS[platform]
+  const other = PLATFORMS[platform === "mac" ? "windows" : "mac"]
+  const mod = platform === "mac" ? "⌘" : "Ctrl"
   return (
     <Layout title="The external code editor for Roblox Studio" description="Bloxcode opens your Roblox Studio scripts in a VS Code-style editor, with live sync, a full Explorer and Wally packages.">
       <main className={styles.page}>
@@ -92,7 +115,7 @@ export default function Home() {
               <img src={useBaseUrl("img/logo.png")} alt="" className={styles.heroLogo} />
               <span className={styles.brandName}>Bloxcode</span>
             </div>
-            <a className={styles.badge} href="/docs/claude">New in 1.2: code your game together with Claude →</a>
+            <a className={styles.badge} href="/docs/intro#install-on-mac">New: Bloxcode for Mac, on Apple Silicon and Intel →</a>
             <h1 className={styles.title}>
               Write Roblox code
               <br />
@@ -102,9 +125,9 @@ export default function Home() {
               Bloxcode replaces the Roblox Studio script editor with a modern editor: full Explorer, autocomplete, Wally packages and live sync.
             </p>
             <div className={styles.ctas}>
-              <a className={`${styles.btn} ${styles.btnPrimary}`} href="/download">
-                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                Download for Windows
+              <a className={`${styles.btn} ${styles.btnPrimary}`} href={main.href}>
+                {DOWNLOAD_ICON}
+                Download for {main.label}
               </a>
               <Link className={`${styles.btn} ${styles.btnGhost}`} to="/docs/intro">
                 Get started
@@ -114,6 +137,9 @@ export default function Home() {
                 GitHub
               </a>
             </div>
+            <p className={styles.altDownload}>
+              Also for <a href={other.href}>{other.label}</a> · Free and open source
+            </p>
           </div>
           <div className={styles.heroShot}>
             <Window src={useBaseUrl("img/editor.png")} alt="Bloxcode with an open script and the Explorer" />
@@ -147,7 +173,7 @@ export default function Home() {
               <li>Drag & drop to move</li>
               <li>Copy the Lua path in one click</li>
               <li>"Select in Studio" jumps to the object</li>
-              <li>Every change is one Ctrl+Z step in Studio</li>
+              <li>Every change is one undo step in Studio</li>
             </ul>
           </div>
           <Window src={useBaseUrl("img/explorer.png")} alt="Context menu in the Bloxcode Explorer" className={styles.splitShot} />
@@ -174,7 +200,7 @@ export default function Home() {
             <ul className={styles.checks}>
               <li>Reads your Explorer and existing code</li>
               <li>Reads the Output after you play-test and fixes errors</li>
-              <li>Every change is one Ctrl+Z step in Studio</li>
+              <li>Every change is one undo step in Studio</li>
               <li>Works with Claude Desktop and Claude Code</li>
             </ul>
             <a className={`${styles.btn} ${styles.btnGhost}`} href="/docs/claude" style={{ marginTop: 22 }}>
@@ -209,7 +235,7 @@ export default function Home() {
               <div key={label} className={styles.shortcut}>
                 <span className={styles.keys}>
                   {keys.map((k) => (
-                    <kbd key={k}>{k}</kbd>
+                    <kbd key={k}>{k === "Mod" ? mod : k}</kbd>
                   ))}
                 </span>
                 <span>{label}</span>
@@ -220,10 +246,14 @@ export default function Home() {
 
         <section className={styles.cta}>
           <h2>Ready for better Roblox code?</h2>
-          <p>Install, turn on Code Mode, done. Free, open source and it keeps itself up to date.</p>
+          <p>Install, turn on Code Mode, done. Free, open source, for Windows and Mac.</p>
           <div className={styles.ctas}>
-            <a className={`${styles.btn} ${styles.btnPrimary}`} href="/download">
-              Download Bloxcode
+            <a className={`${styles.btn} ${styles.btnPrimary}`} href={main.href}>
+              {DOWNLOAD_ICON}
+              Download for {main.label}
+            </a>
+            <a className={`${styles.btn} ${styles.btnGhost}`} href={other.href}>
+              Download for {other.label}
             </a>
             <a className={`${styles.btn} ${styles.btnGhost}`} href="https://github.com/Veitheim/bloxcode">
               View source on GitHub

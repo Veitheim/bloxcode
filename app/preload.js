@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('bridge', {
+  platform: process.platform,
   send: (cmd) => ipcRenderer.send('bridge:command', cmd),
   onEvents: (cb) => ipcRenderer.on('bridge:events', (_e, events) => cb(events)),
   onStatus: (cb) => ipcRenderer.on('bridge:status', (_e, status) => cb(status)),

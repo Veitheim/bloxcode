@@ -52,6 +52,9 @@ kbd {
   padding-right: 150px;
 }
 .tb-logo { width: 48px; display: grid; place-items: center; }
+/* macOS: traffic lights sit on the left, nothing on the right */
+body.mac #titlebar { padding-left: 72px; padding-right: 72px; }
+body.mac .tb-logo { display: none; }
 .tb-logo img { width: 18px; height: 18px; }
 .tb-menu { display: flex; gap: 2px; -webkit-app-region: no-drag; }
 .tb-menu button { padding: 4px 9px; border-radius: 5px; color: var(--fg-dim); font-size: 12.5px; }

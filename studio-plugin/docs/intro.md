@@ -10,12 +10,9 @@ From installing to your first script in Bloxcode in five minutes.
 
 ## 1. Install Bloxcode
 
-[**Download the installer**](https://bloxcode-docs.seidl.workers.dev/download), run it and follow the steps. Bloxcode starts automatically when it's done.
+### Install on Windows
 
-:::info The plugin installs itself
-On first launch, Bloxcode copies the Studio plugin to
-`%LOCALAPPDATA%\Roblox\Plugins\BloxcodeBridge.lua`. You don't need to copy anything by hand.
-:::
+[**Download the installer**](https://bloxcode-docs.seidl.workers.dev/download/windows), run it and follow the steps. Bloxcode starts automatically when it's done.
 
 :::caution Windows SmartScreen
 The installer is not code-signed. If Windows says "Unknown publisher", click
@@ -23,7 +20,30 @@ The installer is not code-signed. If Windows says "Unknown publisher", click
 :::
 
 :::tip Automatic updates
-Bloxcode checks for updates every time it starts, just like Discord. New versions are downloaded and installed automatically.
+On Windows, Bloxcode checks for updates every time it starts, just like Discord. New versions are downloaded and installed automatically.
+:::
+
+### Install on Mac
+
+[**Download Bloxcode for Mac**](https://bloxcode-docs.seidl.workers.dev/download/mac) (works on Apple Silicon and Intel, macOS 12 or newer). Open the `.dmg` and drag **Bloxcode** into **Applications**.
+
+:::caution The first start on Mac
+Bloxcode for Mac is not signed by Apple yet, so macOS blocks it the first time:
+
+1. Open Bloxcode from Applications. macOS says it can't verify the developer. Click **Done** (or **OK**).
+2. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Bloxcode.
+3. Confirm with **Open**. From now on Bloxcode starts normally.
+:::
+
+:::tip Updates on Mac
+When a new version is out, the status bar shows **Bloxcode x.y is out · Download**. Click it, then drag the new version into Applications and replace the old one.
+:::
+
+:::info The plugin installs itself
+On first launch, Bloxcode copies the Studio plugin into Studio's plugins folder. You don't need to copy anything by hand.
+
+- Windows: `%LOCALAPPDATA%\Roblox\Plugins\BloxcodeBridge.lua`
+- Mac: `~/Documents/Roblox/Plugins/BloxcodeBridge.lua`
 :::
 
 ## 2. Connect Studio
@@ -42,7 +62,7 @@ The status bar at the bottom of Bloxcode turns green and shows **Connected to St
 ## 3. Your first script
 
 - **In Studio**, double-click a script. It opens in Bloxcode instead of the Studio editor.
-- **In Bloxcode**, click a script in the Explorer or search with <kbd>Ctrl</kbd> + <kbd>P</kbd>.
+- **In Bloxcode**, click a script in the Explorer or search with <kbd>Ctrl</kbd> + <kbd>P</kbd> (<kbd>⌘</kbd> + <kbd>P</kbd> on Mac).
 - **New script:** right-click `ServerScriptService` → **New Script**.
 
 Everything you type goes to Studio automatically. Learn more in [Explorer & Sync](./explorer) and [Wally Packages](./packages).

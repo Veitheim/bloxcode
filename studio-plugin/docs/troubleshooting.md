@@ -34,10 +34,20 @@ Errors like *"lacking capability"* or *"Script injection"* mean the **Script Inj
 
 Bloxcode connects to **one** Studio window at a time. When you turn on Code Mode in a second place, it takes over, and Code Mode turns off in the first one.
 
+## Mac: "Bloxcode can't be opened" or "Apple could not verify"
+
+Bloxcode for Mac isn't signed by Apple yet. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Bloxcode. You only need to do this once.
+
+If macOS says the app **is damaged**, it was blocked while downloading. Open Terminal and run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Bloxcode.app
+```
+
 ## The update doesn't install
 
-Bloxcode checks for updates on startup. If it can't reach the update server within a few seconds, it starts anyway and tries again later. You can always [download the latest version](https://bloxcode-docs.seidl.workers.dev/download) and install it over the old one.
+On Windows, Bloxcode checks for updates on startup. If it can't reach the update server within a few seconds, it starts anyway and tries again later. On Mac, Bloxcode shows a **Download** link in the status bar when a new version is out. You can always download the latest version for [Windows](https://bloxcode-docs.seidl.workers.dev/download/windows) or [Mac](https://bloxcode-docs.seidl.workers.dev/download/mac) and install it over the old one.
 
 ## I deleted something by accident
 
-Switch to Studio and press <kbd>Ctrl</kbd> + <kbd>Z</kbd>. Every action from Bloxcode is its own undo step there.
+Switch to Studio and press <kbd>Ctrl</kbd> + <kbd>Z</kbd> (<kbd>⌘</kbd> + <kbd>Z</kbd> on Mac). Every action from Bloxcode is its own undo step there.
