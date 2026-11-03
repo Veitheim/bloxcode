@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Bloxcode MCP server. Claude starts this file (with Bloxcode.exe in Node mode) and talks to it
-// over stdin/stdout. Every tool call is forwarded to the running Bloxcode app, which forwards it
+// over stdin/stdout (or Bloxcode's own chat starts it through Claude Code). Every tool call is forwarded to the running Bloxcode app, which forwards it
 // to Roblox Studio. No dependencies, so it runs straight from the app's resources folder.
 
 const http = require('http');
@@ -10,7 +10,7 @@ const os = require('os');
 
 const PORT = Number(process.env.BLOXCODE_PORT) || 34872;
 const KEY_FILE = process.env.BLOXCODE_KEY_FILE || path.join(process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Bloxcode', 'agent-key.txt');
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 
 const INSTRUCTIONS = `You are connected to Bloxcode, an external code editor that is live-synced with the user's open Roblox Studio place.
 - Everything you change lands in Studio right away and is one Ctrl+Z step there. The user watches your edits live in Bloxcode.
@@ -93,6 +93,11 @@ const TOOLS = [
   { name: 'install_package', description: 'Install a Wally package with its dependencies into the place, e.g. "evaera/cmdr" or "sleitnick/knit@1.7".', inputSchema: { type: 'object', properties: { package: { type: 'string' } }, required: ['package'] } },
 ];
 
+/** Turns a tool result from Bloxcode into the text Claude sees. */
+function resultText(res) {
+  return res && typeof res.text === 'string' ? res.text : JSON.stringify(res, null, 2);
+}
+
 function readKey() {
   try { return fs.readFileSync(KEY_FILE, 'utf8').trim(); } catch (_) { return null; }
 }
@@ -142,26 +147,29 @@ async function handle(msg) {
     const name = params && params.name;
     const r = await callBloxcode(name, (params && params.arguments) || {});
     if (r.error) return send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: r.error }], isError: true } });
-    const res = r.result;
-    const text = res && typeof res.text === 'string' ? res.text : JSON.stringify(res, null, 2);
-    return send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text }] } });
+    return send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: resultText(r.result) }] } });
   }
   if (id !== undefined && method) return send({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } });
   // notifications (initialized, cancelled, …) need no answer
 }
 
-let buffer = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
-  buffer += chunk;
-  let i;
-  while ((i = buffer.indexOf('\n')) >= 0) {
-    const line = buffer.slice(0, i).trim();
-    buffer = buffer.slice(i + 1);
-    if (!line) continue;
-    let msg;
-    try { msg = JSON.parse(line); } catch (_) { send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); continue; }
-    handle(msg).catch((e) => msg.id !== undefined && send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: String(e && e.message || e) } }));
-  }
-});
-process.stdin.on('end', () => process.exit(0));
+// The in-app chat (app/chat.js) reuses the tool list; only start the stdio server when run directly.
+if (require.main === module) {
+  let buffer = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    buffer += chunk;
+    let i;
+    while ((i = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, i).trim();
+      buffer = buffer.slice(i + 1);
+      if (!line) continue;
+      let msg;
+      try { msg = JSON.parse(line); } catch (_) { send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); continue; }
+      handle(msg).catch((e) => msg.id !== undefined && send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: String(e && e.message || e) } }));
+    }
+  });
+  process.stdin.on('end', () => process.exit(0));
+}
+
+module.exports = { TOOLS, INSTRUCTIONS, resultText };

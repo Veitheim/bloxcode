@@ -12,6 +12,7 @@ const updater = require('./updater');
 const packages = require('./packages');
 const { createAgent, connectClaude, claudeConnectionState } = require('./agent');
 const { isMac, robloxPluginsDir } = require('./platform');
+const { createChat } = require('./chat');
 
 // BLOXCODE_PORT lets a dev copy run next to an installed Bloxcode (the plugin always uses 34872).
 const PORT = Number(process.env.BLOXCODE_PORT) || 34872;
@@ -256,6 +257,14 @@ function mcpServerConfig() {
   };
 }
 
+// ---------- in-app chat ----------
+const chat = createChat({
+  agent,
+  mcpServerConfig,
+  userData: app.getPath('userData'),
+  emit: (event) => { if (win && !win.isDestroyed()) win.webContents.send('chat:event', event); },
+});
+
 // ---------- Studio plugin install ----------
 let pluginInstallInfo = { installed: false, path: null, error: null, updated: false };
 
@@ -369,6 +378,15 @@ ipcMain.handle('claude:connect', () => {
   sendStatus(true);
   return r;
 });
+ipcMain.handle('chat:state', () => chat.state());
+ipcMain.handle('chat:detect', () => chat.detectClaudeCode());
+ipcMain.handle('chat:setMode', (_e, mode) => chat.setMode(mode));
+ipcMain.handle('chat:saveKey', (_e, key) => chat.setApiKey(key));
+ipcMain.handle('chat:clearKey', () => chat.clearApiKey());
+ipcMain.handle('chat:send', (_e, text) => chat.send(text));
+ipcMain.on('chat:stop', () => chat.stop());
+ipcMain.on('chat:reset', () => chat.reset());
+ipcMain.on('chat:install', () => chat.openInstallTerminal());
 ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(String(text)));
 ipcMain.on('window:titleColor', (_e, colors) => {
   if (isMac) return;

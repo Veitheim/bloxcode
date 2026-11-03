@@ -4,51 +4,57 @@ title: Code with Claude
 slug: /claude
 ---
 
-Bloxcode can connect [Claude](https://claude.ai) to your open Roblox Studio place. You describe what you want in a chat, and Claude builds it right inside your game. It reads your Explorer and scripts, writes code, creates RemoteEvents, GUIs and parts, installs Wally packages and reads the Output after you play-test.
+Chat with [Claude](https://claude.ai) right inside Bloxcode. You describe what you want, and Claude builds it in your open Roblox Studio place. It reads your Explorer and scripts, writes code, creates RemoteEvents, GUIs and parts, installs Wally packages and reads the Output after you play-test.
 
-You watch every change live in Bloxcode. Each change is one undo step in Studio, so **Ctrl+Z** takes it back.
+You watch every change live in Bloxcode. Each change is one undo step in Studio, so **Ctrl+Z** (**⌘+Z** on Mac) takes it back.
 
 :::info What you need
-- Bloxcode **1.2.0** or newer
+- Bloxcode **1.3.0** or newer
 - Roblox Studio with the Bloxcode plugin and **Code Mode** on
-- [Claude Desktop](https://claude.ai/download) or [Claude Code](https://claude.com/claude-code)
+- A Claude plan (Pro or Max) **or** an Anthropic API key
 :::
 
-## 1. Connect Claude
+## 1. Connect Claude (once)
 
-1. In Bloxcode, click the **sparkle icon** in the bar on the left to open the **Claude** panel.
-2. Click **Connect Claude**.
-3. **Restart Claude** (quit it fully, also from the system tray, then open it again).
+Click the **sparkle icon** in the bar on the left to open the **Claude** panel. Pick one of the two ways:
 
-Bloxcode adds itself as an MCP server called `bloxcode` to Claude Desktop and Claude Code on this PC. MCP is the standard way Claude uses tools in other apps. The panel shows a green dot once it is set up.
+### Your Claude plan (recommended)
 
-In Claude Desktop you can check it under **Settings → Developer**: `bloxcode` should be listed as running. In Claude Code, run `/mcp`.
+Bloxcode uses [Claude Code](https://claude.com/claude-code) on your computer, so the chat runs on your Claude plan at no extra cost.
 
-## 2. Start a chat
+1. Click **Install & sign in**. A terminal window opens, installs Claude Code if it's missing and starts the sign-in.
+2. Sign in with your Claude account in the browser.
+3. Back in Bloxcode, click **I'm done, check again**.
 
-Keep Roblox Studio (with Code Mode on) and Bloxcode open. Start a **new chat** with Claude and paste the starter prompt. Bloxcode has a **Copy prompt** button for it in the Claude panel, and here it is:
+Bloxcode never sees your Claude password or login. If Claude Code is already installed and signed in, you only click **Use my Claude plan**.
 
-```text
-You are my Roblox developer. You are connected to my open Roblox Studio place through Bloxcode (the "bloxcode" MCP tools).
+### Your own API key
 
-How to work:
-1. Call get_status. If Studio is not connected, tell me what to do.
-2. Call get_explorer to learn how my game is organized, and read the scripts that matter before you change anything.
-3. Make changes directly with the Bloxcode tools (create_instance, write_script, edit_script, set_properties, install_package). Don't paste code into the chat for me to copy.
-4. Server code goes in ServerScriptService, client code in StarterPlayerScripts or StarterGui, shared modules and RemoteEvents in ReplicatedStorage. Never trust the client.
-5. Write clean, modern Luau (task library, GetService, types where useful) and follow the style already in my game.
-6. When something needs testing, tell me to press Play, then read the errors with get_output and fix them.
-7. Ask before deleting or rewriting big parts of the game. At the end, give me a short summary of what you changed.
+1. Create a key in the [Claude Console](https://console.anthropic.com/settings/keys).
+2. Paste it into the Claude panel and click **Save key**.
 
-My first task: 
-```
+The key is stored encrypted on your computer. Usage is billed by Anthropic per request, separately from a Claude plan.
 
-Add your task at the end, for example:
+:::note On Mac
+The first time you save a key (and after an update), macOS asks whether Bloxcode may use its keychain. Enter your Mac password and click **Always Allow**.
+:::
+
+:::note On Mac
+The first time you save a key (and after an update), macOS asks whether Bloxcode may use its keychain. Enter your Mac password and click **Always Allow**.
+:::
+
+You can switch between the two any time with the **gear icon** at the top of the Claude panel.
+
+## 2. Chat
+
+Keep Roblox Studio (with Code Mode on) and Bloxcode open, type what you want and press **Enter**. For example:
 
 - *Add a coin system: coins spawn on the map, players collect them, and the count shows in the leaderboard and in a GUI.*
 - *Make a shop GUI with three items that costs coins. Check purchases on the server.*
 - *Install Cmdr and add an admin command that gives coins.*
 - *I get an error when I press Play. Find it and fix it.*
+
+The chat shows each step Claude takes (✓ done, ✕ failed). **Stop** ends the current answer, and **+** starts a new chat.
 
 ## 3. Test together
 
@@ -80,13 +86,22 @@ The Bloxcode status bar shows what Claude is doing right now, and the Claude pan
 
 ## Safety
 
-- Only programs on your own PC can use the connection. Bloxcode listens on `localhost`, and every request needs a secret key that only Bloxcode and Claude's config know. Websites can't use it.
+- In the chat, Claude can only use Bloxcode's tools. It can't run programs or read other files on your computer.
+- Only programs on your own PC can use the connection. Bloxcode listens on `localhost`, and every request needs a secret key that only Bloxcode and the Claude setup it creates know. Websites can't use it.
 - Claude only works while Bloxcode is open and Code Mode is on in Studio.
 - Every change is an undo step in Studio. Save or publish your place regularly, like you always do.
 
+## Use Claude Desktop instead
+
+You can still use Bloxcode's tools from Claude Desktop. In the Claude panel, open the gear icon → **Use Claude Desktop instead**, click **Connect Claude Desktop** and restart Claude. Then start a new chat in Claude Desktop and paste the starter prompt (**Copy starter prompt**).
+
 ## Troubleshooting
 
-**Claude doesn't have the Bloxcode tools.** Restart Claude fully after clicking Connect Claude. Then check Settings → Developer (Claude Desktop) or `/mcp` (Claude Code).
+**"Claude Code is not signed in"** Click **Sign in** in the Claude panel and finish the sign-in in the browser.
+
+**"The API key was rejected"** Check the key in the Claude Console and save it again (gear icon → Remove key).
+
+**Claude Desktop doesn't have the Bloxcode tools.** Restart Claude fully after clicking Connect Claude Desktop. Then check Settings → Developer.
 
 **"Bloxcode is not running"** Open the Bloxcode app.
 

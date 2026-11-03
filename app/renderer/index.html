@@ -70,8 +70,27 @@
       </section>
 
       <section id="view-claude" class="view">
-        <header class="view-header"><span>CLAUDE</span></header>
-        <div class="plugin-panel" id="claude-panel"></div>
+        <header class="view-header">
+          <span>CLAUDE</span>
+          <div class="view-actions">
+            <button id="chat-new" title="New chat">
+              <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+            <button id="chat-settings" title="Connection settings">
+              <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.8v1.8M8 12.4v1.8M1.8 8h1.8M12.4 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </header>
+        <div id="chat-setup" class="plugin-panel hidden"></div>
+        <div id="chat-log" class="hidden"></div>
+        <form id="chat-form" class="hidden">
+          <textarea id="chat-input" rows="3" placeholder="Tell Claude what to build…" spellcheck="false"></textarea>
+          <div class="chat-bar">
+            <span id="chat-mode"></span>
+            <button type="button" id="chat-stop" class="hidden">Stop</button>
+            <button type="submit" id="chat-send">Send</button>
+          </div>
+        </form>
       </section>
 
       <section id="view-plugin" class="view">
