@@ -25,7 +25,7 @@
 - **Two-way sync:** what you type goes to Studio right away, and changes in Studio show up in Bloxcode. Every change is one undo step in Studio.
 - **Wally packages:** search and install Cmdr, Knit, Promise, Fusion and more with one click, dependencies included.
 - **Luau editor:** Monaco (the editor behind VS Code) with Luau highlighting, snippets and autocomplete that knows your Explorer.
-- **Code with Claude:** connect Claude with one click and it builds features right inside your place: reads the Explorer and scripts, writes code, creates instances, installs packages and reads the Output after you play-test. See [Code with Claude](https://bloxcode-docs.seidl.workers.dev/docs/claude).
+- **Code with Claude:** chat with Claude right in Bloxcode (with your Claude plan through Claude Code, or your own API key) and it builds features right inside your place: reads the Explorer and scripts, writes code, creates instances, installs packages and reads the Output after you play-test. See [Code with Claude](https://bloxcode-docs.seidl.workers.dev/docs/claude).
 - **Auto updates:** Bloxcode updates itself on startup, like Discord.
 
 ## How it works
@@ -50,7 +50,8 @@ The Studio plugin is the client: it posts Explorer changes to Bloxcode and long-
 | `app/updater.js` | Splash window and auto-updater |
 | `app/packages.js` | Wally registry client, dependency resolution, Rojo-style file conversion |
 | `app/agent.js` | Tools for Claude: Explorer mirror, output log, requests to the plugin, Claude config setup |
-| `app/mcp/bloxcode-mcp.js` | MCP server Claude starts (runs with the Bloxcode executable in Node mode, no dependencies) |
+| `app/chat.js` | In-app chat: runs Claude Code (`claude -p`) with the Bloxcode MCP server, or the agent loop with an API key |
+| `app/mcp/bloxcode-mcp.js` | MCP server Claude starts (runs with the Bloxcode executable in Node mode, no dependencies); also exports the tool list for the chat |
 | `app/renderer/` | The editor UI (Monaco, Explorer, tabs, package view) |
 | `studio-plugin/src/CodeBridge.lua` | The Roblox Studio plugin |
 | `studio-plugin/docs`, `pages`, `.moonwave` | Website and docs (Moonwave) |

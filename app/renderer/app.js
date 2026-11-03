@@ -820,45 +820,240 @@ function onAgentActivity(text) {
 }
 $('#sb-agent').addEventListener('click', () => showView('claude'));
 
+// ---------- in-app chat ----------
+let chatState = null;
+let chatSetupOpen = false;
+let chatBusy = false;
+
+function chatReady(st) {
+  if (!st) return false;
+  if (st.mode === 'api') return st.hasKey;
+  if (st.mode === 'code') return !!(st.claudeCode && st.claudeCode.path && st.claudeCode.loggedIn);
+  return false;
+}
+
 function renderClaudePanel() {
+  // Called on every status change: only touch the parts that don't hold user input.
+  const log = $('#claude-activity');
+  if (log) log.innerHTML = activityHtml();
+}
+
+function activityHtml() {
+  const time = (d) => d.toTimeString().slice(0, 5);
+  return agentLog.length
+    ? `<ul class="claude-log">${agentLog.map((a) => `<li><span>${time(a.time)}</span>${esc(a.text)}</li>`).join('')}</ul>`
+    : '<p>Nothing yet. Claude\'s changes show up here.</p>';
+}
+
+function applyChatState() {
+  const st = chatState;
+  const ready = chatReady(st);
+  const setup = !ready || chatSetupOpen;
+  $('#chat-setup').classList.toggle('hidden', !setup);
+  $('#chat-log').classList.toggle('hidden', setup);
+  $('#chat-form').classList.toggle('hidden', setup);
+  if (setup) renderChatSetup();
+  $('#chat-mode').textContent = !st ? '' : st.mode === 'api' ? `API key · ${st.model || ''}` : st.mode === 'code' ? 'Your Claude plan (Claude Code)' : '';
+  chatBusy = !!(st && st.busy);
+  $('#chat-send').disabled = chatBusy;
+  $('#chat-stop').classList.toggle('hidden', !chatBusy);
+  if (!setup && !$('#chat-log').children.length) renderChatEmpty();
+}
+
+function renderChatSetup() {
+  const st = chatState || { claudeCode: {} };
+  const cc = st.claudeCode || {};
+  const codeReady = !!(cc.path && cc.loggedIn);
+  let codeStatus;
+  if (!cc.checked) codeStatus = '<span class="pill warn"><span class="dot"></span>Checking…</span>';
+  else if (!cc.path) codeStatus = '<span class="pill warn"><span class="dot"></span>Claude Code is not installed</span>';
+  else if (!cc.loggedIn) codeStatus = '<span class="pill warn"><span class="dot"></span>Installed, not signed in</span>';
+  else codeStatus = `<span class="pill ok"><span class="dot"></span>Ready${cc.authMethod && cc.authMethod !== 'claude.ai' ? ' (' + esc(cc.authMethod) + ')' : ''}</span>`;
   const c = status.claude || {};
   const linked = c.desktop || c.code;
-  const time = (d) => d.toTimeString().slice(0, 5);
-  $('#claude-panel').innerHTML = `
-    <p>Let Claude build your game with you. Claude reads your Explorer and scripts, writes code, creates RemoteEvents and GUIs, installs Wally packages and reads the Output after you play-test. You watch every change live here.</p>
-    <h3>1. Connect Claude</h3>
-    <p>${linked
-      ? `<span class="pill ok"><span class="dot"></span>Set up for ${[c.desktop && 'Claude Desktop', c.code && 'Claude Code'].filter(Boolean).join(' and ')}</span>`
-      : '<span class="pill warn"><span class="dot"></span>Not connected yet</span>'}</p>
-    <button class="primary" data-claude="connect">${linked ? 'Connect again' : 'Connect Claude'}</button>
-    <p>Adds Bloxcode to Claude Desktop and Claude Code on this PC. Restart Claude afterwards.</p>
-    <h3>2. Start a chat</h3>
-    <p>Keep Studio (with Code Mode on) and Bloxcode open. Start a new chat with Claude, paste this prompt and add your task:</p>
-    <div class="claude-prompt">${esc(STARTER_PROMPT)}…</div>
-    <button class="secondary" data-claude="copy">Copy prompt</button>
-    <button class="secondary" data-claude="docs">How it works</button>
-    <h3>Activity</h3>
-    ${agentLog.length
-      ? `<ul class="claude-log">${agentLog.map((a) => `<li><span>${time(a.time)}</span>${esc(a.text)}</li>`).join('')}</ul>`
-      : '<p>Nothing yet. Claude\'s changes show up here.</p>'}
-    <p>Status: ${status.connected ? '<span class="claude-ok">Studio connected</span>' : 'Studio not connected'}</p>`;
+  $('#chat-setup').innerHTML = `
+    <p>Chat with Claude right here. It reads your game, writes scripts, creates objects and fixes errors while you watch.</p>
+    ${chatReady(st) ? '<button class="secondary" data-chat="back">← Back to the chat</button>' : ''}
+    <div class="chat-card ${st.mode === 'code' ? 'active' : ''}">
+      <h3>Use your Claude plan <span class="tag">Recommended</span></h3>
+      <p>For Claude Pro or Max. Bloxcode uses Claude Code on this computer, so there is no extra cost and nothing to set up in Claude.</p>
+      <p>${codeStatus}</p>
+      ${codeReady
+        ? `<button class="primary" data-chat="use-code">${st.mode === 'code' ? 'Using your Claude plan ✓' : 'Use my Claude plan'}</button>`
+        : `<button class="primary" data-chat="install">${cc.path ? 'Sign in' : 'Install & sign in'}</button>
+           <button class="secondary" data-chat="detect">I'm done, check again</button>
+           <p class="fine">A terminal window opens. ${cc.path ? '' : 'It installs Claude Code, then '}sign in with your Claude account in the browser.</p>`}
+    </div>
+    <div class="chat-card ${st.mode === 'api' ? 'active' : ''}">
+      <h3>Use an API key</h3>
+      <p>Pay per use with your own key from the Claude Console, billed by Anthropic separately from a Claude plan.</p>
+      ${st.hasKey
+        ? `<p><span class="pill ok"><span class="dot"></span>Key saved (encrypted on this computer)</span></p>
+           <button class="primary" data-chat="use-api">${st.mode === 'api' ? 'Using your API key ✓' : 'Use my API key'}</button>
+           <button class="secondary" data-chat="clear-key">Remove key</button>`
+        : `<input id="chat-key" type="password" placeholder="sk-ant-…" spellcheck="false" autocomplete="off">
+           <button class="primary" data-chat="save-key">Save key</button>
+           <p class="fine"><a href="https://console.anthropic.com/settings/keys" target="_blank">Get a key in the Claude Console</a></p>`}
+    </div>
+    <details>
+      <summary>Use Claude Desktop instead (advanced)</summary>
+      <p>Adds Bloxcode as an MCP server to Claude Desktop and Claude Code. Restart Claude afterwards, start a new chat and paste the starter prompt.</p>
+      <p>${linked
+        ? `<span class="pill ok"><span class="dot"></span>Set up for ${[c.desktop && 'Claude Desktop', c.code && 'Claude Code'].filter(Boolean).join(' and ')}</span>`
+        : '<span class="pill warn"><span class="dot"></span>Not set up</span>'}</p>
+      <button class="secondary" data-claude="connect">${linked ? 'Connect again' : 'Connect Claude Desktop'}</button>
+      <button class="secondary" data-claude="copy">Copy starter prompt</button>
+      <button class="secondary" data-claude="docs">How it works</button>
+    </details>
+    <details>
+      <summary>Activity</summary>
+      <div id="claude-activity">${activityHtml()}</div>
+    </details>`;
 }
-$('#claude-panel').addEventListener('click', async (e) => {
+
+$('#chat-setup').addEventListener('click', async (e) => {
   const b = e.target.closest('button');
   if (!b) return;
-  if (b.dataset.claude === 'connect') {
-    try {
+  const act = b.dataset.chat || b.dataset.claude;
+  try {
+    if (act === 'back') { chatSetupOpen = false; applyChatState(); }
+    else if (act === 'install') { bridge.chat.install(); toast('Finish the sign-in in the terminal window, then click "check again".'); }
+    else if (act === 'detect') { b.textContent = 'Checking…'; chatState = await bridge.chat.detect(); if (chatReady({ ...chatState, mode: 'code' })) { chatState = await bridge.chat.setMode('code'); chatSetupOpen = false; } applyChatState(); }
+    else if (act === 'use-code') { chatState = await bridge.chat.setMode('code'); chatSetupOpen = false; applyChatState(); }
+    else if (act === 'use-api') { chatState = await bridge.chat.setMode('api'); chatSetupOpen = false; applyChatState(); }
+    else if (act === 'save-key') { chatState = await bridge.chat.saveKey($('#chat-key').value); chatSetupOpen = false; applyChatState(); toast('API key saved.'); }
+    else if (act === 'clear-key') { chatState = await bridge.chat.clearKey(); applyChatState(); }
+    else if (act === 'connect') {
       const r = await bridge.connectClaude();
       if (r.done.length) toast(`Connected: ${[...new Set(r.done.map((d) => d.app))].join(' and ')}. Restart Claude to load Bloxcode.`);
       if (r.errors.length) toast(r.errors.join(' '), 'error');
-    } catch (err) { toast('Error: ' + err.message, 'error'); }
-  } else if (b.dataset.claude === 'copy') {
-    bridge.copy(STARTER_PROMPT);
-    toast('Prompt copied. Paste it into a new Claude chat and add your task.');
-  } else if (b.dataset.claude === 'docs') {
-    window.open('https://bloxcode-docs.seidl.workers.dev/docs/claude');
+      renderChatSetup();
+    } else if (act === 'copy') { bridge.copy(STARTER_PROMPT); toast('Prompt copied. Paste it into a new Claude chat and add your task.'); }
+    else if (act === 'docs') window.open('https://bloxcode-docs.seidl.workers.dev/docs/claude');
+  } catch (err) {
+    toast(String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error');
   }
 });
+
+const CHAT_SUGGESTIONS = [
+  'Add a coin system: coins spawn on the map and the count shows in the leaderboard.',
+  'Find and fix the errors from my last play-test.',
+  'Make a shop GUI with three items that cost coins. Check purchases on the server.',
+];
+function renderChatEmpty() {
+  $('#chat-log').innerHTML = `<div class="chat-empty">
+    <h3>What should Claude build?</h3>
+    ${status.connected ? '' : '<p>Connect Roblox Studio first: Plugins → Bloxcode → Code Mode.</p>'}
+    <ul>${CHAT_SUGGESTIONS.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    <p>Every change is one undo step in Studio.</p>
+  </div>`;
+}
+$('#chat-log').addEventListener('click', (e) => {
+  const li = e.target.closest('.chat-empty li');
+  if (li) { $('#chat-input').value = li.textContent; $('#chat-input').focus(); }
+});
+
+// rendering of the conversation
+let curText = null; // { el, raw }
+let curNote = null;
+const pendingTools = [];
+const TOOL_LABELS = {
+  get_status: 'Checked the connection', get_explorer: 'Looked at the Explorer', read_script: 'Read', write_script: 'Wrote',
+  edit_script: 'Edited', create_instance: 'Created', rename_instance: 'Renamed', move_instance: 'Moved', delete_instance: 'Deleted',
+  get_properties: 'Read properties of', set_properties: 'Changed', search_scripts: 'Searched scripts for', get_output: 'Read the Output',
+  get_selection: 'Checked your selection', open_in_editor: 'Opened', search_packages: 'Searched packages for', install_package: 'Installed',
+};
+function toolTarget(name, input) {
+  const a = input || {};
+  if (name === 'create_instance' && a.parent && a.name) return `${a.parent}.${a.name}`;
+  if (name === 'move_instance' && a.path && a.new_parent) return `${a.path} → ${a.new_parent}`;
+  if (name === 'rename_instance' && a.path && a.new_name) return `${a.path} → ${a.new_name}`;
+  return a.path || a.query || a.package || '';
+}
+function mdLite(raw) {
+  const inline = (t) => esc(t).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  return raw.split(/```/).map((part, i) => {
+    if (i % 2) return `<pre><code>${esc(part.replace(/^[\w-]*\n/, ''))}</code></pre>`;
+    return part.split(/\n{2,}/).filter((p) => p.trim()).map((p) => `<p>${inline(p.trim()).replace(/\n/g, '<br>')}</p>`).join('');
+  }).join('');
+}
+function chatAppend(el) {
+  const log = $('#chat-log');
+  const empty = log.querySelector('.chat-empty');
+  if (empty) empty.remove();
+  const working = log.querySelector('.msg.working');
+  log.insertBefore(el, working);
+  const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
+  if (nearBottom || el.classList.contains('user')) log.scrollTop = log.scrollHeight;
+}
+function chatMsg(cls, html) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + cls;
+  el.innerHTML = html;
+  chatAppend(el);
+  return el;
+}
+function setWorking(on) {
+  const log = $('#chat-log');
+  const w = log.querySelector('.msg.working');
+  if (on && !w) { const el = document.createElement('div'); el.className = 'msg working'; el.textContent = 'Claude is working…'; log.appendChild(el); log.scrollTop = log.scrollHeight; }
+  if (!on && w) w.remove();
+}
+
+bridge.chat.onEvent((ev) => {
+  switch (ev.type) {
+    case 'state': chatState = ev.state; applyChatState(); break;
+    case 'reset': $('#chat-log').innerHTML = ''; curText = curNote = null; pendingTools.length = 0; renderChatEmpty(); break;
+    case 'user': curText = curNote = null; chatMsg('user', esc(ev.text)); setWorking(true); break;
+    case 'text':
+      curNote = null;
+      if (!curText) curText = { el: chatMsg('assistant', ''), raw: '' };
+      curText.raw += ev.text;
+      curText.el.innerHTML = mdLite(curText.raw);
+      chatAppend(curText.el);
+      break;
+    case 'note':
+      if (!curNote) curNote = { el: chatMsg('note', ''), raw: '' };
+      curNote.raw += ev.text;
+      curNote.el.textContent = curNote.raw.trim();
+      break;
+    case 'tool': {
+      curText = curNote = null;
+      const target = toolTarget(ev.name, ev.input);
+      const el = chatMsg('tool', `<span class="ico">⋯</span><span><b>${esc(TOOL_LABELS[ev.name] || ev.name)}</b> ${esc(target)}</span>`);
+      pendingTools.push({ name: ev.name, el });
+      break;
+    }
+    case 'tool_result': {
+      const i = pendingTools.findIndex((t) => t.name === ev.name);
+      const t = i >= 0 ? pendingTools.splice(i, 1)[0] : pendingTools.shift();
+      if (!t) break;
+      t.el.classList.add(ev.isError ? 'err' : 'ok');
+      t.el.querySelector('.ico').textContent = ev.isError ? '✕' : '✓';
+      if (ev.isError && ev.text) t.el.lastElementChild.insertAdjacentHTML('beforeend', `<span class="err-text">${esc(ev.text)}</span>`);
+      break;
+    }
+    case 'error': curText = curNote = null; chatMsg('error', esc(ev.message)); break;
+    case 'done': setWorking(false); curText = curNote = null; pendingTools.length = 0; break;
+  }
+});
+
+$('#chat-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = $('#chat-input');
+  const text = input.value.trim();
+  if (!text || chatBusy) return;
+  input.value = '';
+  bridge.chat.send(text).catch((err) => toast(String(err.message || err), 'error'));
+});
+$('#chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#chat-form').requestSubmit(); }
+});
+$('#chat-stop').addEventListener('click', () => bridge.chat.stop());
+$('#chat-new').addEventListener('click', () => { if (!chatBusy || confirm('Stop Claude and start a new chat?')) { bridge.chat.reset(); chatSetupOpen = false; applyChatState(); } });
+$('#chat-settings').addEventListener('click', () => { chatSetupOpen = !chatSetupOpen || !chatReady(chatState); applyChatState(); });
+
+bridge.chat.state().then((st) => { chatState = st; applyChatState(); return bridge.chat.detect(); }).then((st) => { chatState = st; applyChatState(); });
 
 function toast(text, kind) {
   const t = document.createElement('div');

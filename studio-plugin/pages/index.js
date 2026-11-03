@@ -115,7 +115,7 @@ export default function Home() {
               <img src={useBaseUrl("img/logo.png")} alt="" className={styles.heroLogo} />
               <span className={styles.brandName}>Bloxcode</span>
             </div>
-            <a className={styles.badge} href="/docs/intro#install-on-mac">New: Bloxcode for Mac, on Apple Silicon and Intel →</a>
+            <a className={styles.badge} href="/docs/claude">New in 1.3: chat with Claude right in Bloxcode, now also on Mac →</a>
             <h1 className={styles.title}>
               Write Roblox code
               <br />
@@ -195,13 +195,13 @@ export default function Home() {
             <span className={styles.eyebrow}>New · Claude</span>
             <h2>Build your game with Claude.</h2>
             <p>
-              Connect Claude with one click. Tell it what you want, and it writes the scripts, creates RemoteEvents and GUIs, and installs packages right inside your place, while you watch in Bloxcode.
+              Chat with Claude right inside Bloxcode. Tell it what you want, and it writes the scripts, creates RemoteEvents and GUIs, and installs packages right inside your place, while you watch.
             </p>
             <ul className={styles.checks}>
               <li>Reads your Explorer and existing code</li>
               <li>Reads the Output after you play-test and fixes errors</li>
               <li>Every change is one undo step in Studio</li>
-              <li>Works with Claude Desktop and Claude Code</li>
+              <li>Use your Claude plan or your own API key</li>
             </ul>
             <a className={`${styles.btn} ${styles.btnGhost}`} href="/docs/claude" style={{ marginTop: 22 }}>
               How it works

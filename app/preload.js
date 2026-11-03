@@ -14,4 +14,16 @@ contextBridge.exposeInMainWorld('bridge', {
   installPackage: (spec) => ipcRenderer.invoke('packages:install', spec),
   onPackageProgress: (cb) => ipcRenderer.on('packages:progress', (_e, p) => cb(p)),
   connectClaude: () => ipcRenderer.invoke('claude:connect'),
+  chat: {
+    state: () => ipcRenderer.invoke('chat:state'),
+    detect: () => ipcRenderer.invoke('chat:detect'),
+    setMode: (mode) => ipcRenderer.invoke('chat:setMode', mode),
+    saveKey: (key) => ipcRenderer.invoke('chat:saveKey', key),
+    clearKey: () => ipcRenderer.invoke('chat:clearKey'),
+    send: (text) => ipcRenderer.invoke('chat:send', text),
+    stop: () => ipcRenderer.send('chat:stop'),
+    reset: () => ipcRenderer.send('chat:reset'),
+    install: () => ipcRenderer.send('chat:install'),
+    onEvent: (cb) => ipcRenderer.on('chat:event', (_e, ev) => cb(ev)),
+  },
 });
