@@ -3,6 +3,12 @@
 
 const CHANGELOG = [
   {
+    version: '2.0.1',
+    date: '2026-11-18',
+    title: 'Claude sign-in fix',
+    sections: [['Fixed', ['"Install & sign in" in the Claude panel showed the Windows error "sign-in\ could not be found" instead of opening the sign-in window.']]],
+  },
+  {
     version: '2.0.0',
     date: '2026-11-18',
     title: 'Bloxcode 2.0',

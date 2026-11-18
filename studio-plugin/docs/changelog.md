@@ -3,6 +3,10 @@ sidebar_position: 12
 title: Changelog
 ---
 
+## 2.0.1 · November 18, 2026
+
+- Fixed: **Install & sign in** in the Claude panel showed the Windows error *"sign-in\\" could not be found* instead of opening the sign-in window.
+
 ## 2.0.0 · November 18, 2026
 
 The biggest update yet: themes, real Luau type checking, search across all scripts, play tests from Bloxcode, GitHub publishing and a much more capable Claude. 2.0 is out for Windows first; the Mac version follows.

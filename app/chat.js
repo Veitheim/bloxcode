@@ -126,7 +126,12 @@ function createChat({ agent, mcpServerConfig, userData, emit }) {
       const cmd = p
         ? `& '${p.replace(/'/g, "''")}' auth login`
         : `irm https://claude.ai/install.ps1 | iex; & "$env:USERPROFILE\\.local\\bin\\claude.exe" auth login`;
-      spawn('cmd.exe', ['/c', 'start', '"Claude sign-in"', 'powershell', '-NoExit', '-Command', `${cmd}; Write-Host ''; Write-Host 'Done. You can close this window and go back to Bloxcode.'`], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+      // `start` opens a new console window. The command line is passed verbatim (Node would otherwise
+      // escape the quoted window title, and Windows then tried to run "sign-in\"), and the PowerShell
+      // script is base64-encoded so no quotes can get lost on the way.
+      const script = `$Host.UI.RawUI.WindowTitle = 'Claude sign-in'; ${cmd}; Write-Host ''; Write-Host 'Done. You can close this window and go back to Bloxcode.'`;
+      const encoded = Buffer.from(script, 'utf16le').toString('base64');
+      spawn('cmd.exe', ['/d', '/c', `start "Claude sign-in" powershell.exe -NoExit -ExecutionPolicy Bypass -EncodedCommand ${encoded}`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true }).unref();
     } else {
       shell.openExternal('https://code.claude.com/docs/en/setup');
     }
