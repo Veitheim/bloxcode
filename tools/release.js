@@ -1,5 +1,5 @@
 // Publishes a new Bloxcode version:
-//   1. builds the installer (electron-builder)
+//   1. builds the installer (tools/build.js, signed if signing is set up)
 //   2. uploads the installer + latest.yml to the R2 bucket that the website serves at /updates
 //
 // Bump "version" in package.json first, then run: npm run release (Windows) or npm run release:mac (Mac)
@@ -33,7 +33,7 @@ if (process.env.BLOXCODE_DIST) dist = path.resolve(process.env.BLOXCODE_DIST);
 if (!process.argv.includes('--skip-build')) {
   run(mac
     ? `npx electron-builder --mac --universal -c.directories.output="${dist}"`
-    : `npx electron-builder --win nsis -c.directories.output="${dist}"`);
+    : `node tools/build.js`);
 }
 
 if (mac) {

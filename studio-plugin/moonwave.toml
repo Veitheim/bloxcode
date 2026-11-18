@@ -6,8 +6,8 @@ gitSourceBranch = "main"
 [docusaurus]
 url = "https://bloxcode-docs.seidl.workers.dev"
 baseUrl = "/"
-tagline = "The external code editor for Roblox Studio"
-favicon = "img/logo.png"
+tagline = "The modern code editor for Roblox Studio"
+favicon = "img/favicon.png"
 
 [navbar]
 title = "Bloxcode"
@@ -18,13 +18,18 @@ alt = "Bloxcode"
 src = "img/logo.png"
 
 [[navbar.items]]
-to = "/docs/packages"
-label = "Packages"
+to = "/docs/editor"
+label = "Features"
 position = "left"
 
 [[navbar.items]]
 to = "/docs/claude"
 label = "Claude"
+position = "left"
+
+[[navbar.items]]
+to = "/docs/changelog"
+label = "What's new"
 position = "left"
 
 [[navbar.items]]
@@ -34,7 +39,7 @@ position = "right"
 
 [footer]
 style = "dark"
-copyright = "Bloxcode · Built with Moonwave · Hosted on Cloudflare Workers"
+copyright = "Bloxcode 2.0 · Built with Moonwave · Hosted on Cloudflare Workers · Not affiliated with Roblox Corporation"
 
 [[footer.links]]
 title = "Docs"
@@ -48,8 +53,24 @@ label = "Explorer & Sync"
 to = "/docs/explorer"
 
 [[footer.links.items]]
+label = "Editor & Themes"
+to = "/docs/editor"
+
+[[footer.links.items]]
+label = "Luau Type Checking"
+to = "/docs/luau"
+
+[[footer.links.items]]
+label = "Play Tests & Output"
+to = "/docs/testing"
+
+[[footer.links.items]]
 label = "Wally Packages"
 to = "/docs/packages"
+
+[[footer.links.items]]
+label = "GitHub"
+to = "/docs/github"
 
 [[footer.links.items]]
 label = "Code with Claude"

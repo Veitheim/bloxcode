@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Bloxcode: an isometric block with a code prompt (">" and "_") on its sides -->
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C4B5FD"/>
+      <stop offset="1" stop-color="#8B9CFF"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#5132E0"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(512 512) scale(1.45) translate(-512 -516)">
+    <g stroke-linejoin="round">
+      <path d="M512 196 L790 356 L512 516 L234 356 Z" fill="url(#top)"/>
+      <path d="M234 356 L512 516 L512 836 L234 676 Z" fill="url(#left)"/>
+      <path d="M512 516 L790 356 L790 676 L512 836 Z" fill="url(#right)"/>
+      <path d="M512 516 L512 836" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="4"/>
+      <path d="M234 356 L512 516 L790 356" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="5"/>
+    </g>
+    <g fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="32,32 60,52 32,72" transform="matrix(2.78,1.6,0,3.2,234,356)"/>
+      <line x1="32" y1="70" x2="68" y2="70" transform="matrix(2.78,-1.6,0,3.2,512,516)"/>
+    </g>
+  </g>
+</svg>

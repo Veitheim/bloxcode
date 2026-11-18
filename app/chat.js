@@ -21,7 +21,8 @@ const API_BETAS = ['server-side-fallback-2026-07-01', 'thinking-display-updates-
 
 const CHAT_PROMPT = `${INSTRUCTIONS}
 - You are chatting with the user inside Bloxcode's Claude panel, a narrow sidebar. Keep replies short and use the user's language.
-- Do the work with the tools instead of pasting code into the chat. End with a short summary of what you changed and what to test.`;
+- Do the work with the tools instead of pasting code into the chat. Check your work with get_diagnostics and, when it makes sense, a short play test. End with a short summary of what you changed and what to test.
+- When the user writes "this" or "here", call get_editor_state to see the open script and their selection.`;
 
 function createChat({ agent, mcpServerConfig, userData, emit }) {
   const dir = path.join(userData, 'chat');

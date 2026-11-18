@@ -6,3 +6,6 @@ studio-plugin/.moonwave/*
 !studio-plugin/.moonwave/static/
 studio-plugin/.wrangler/
 .wrangler/
+signing.json
+*.pfx
+*.p12

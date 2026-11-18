@@ -2,7 +2,8 @@
 // Runs a small HTTP server on localhost that the Roblox Studio plugin talks to,
 // and forwards everything to the editor window over IPC.
 
-const { app, BrowserWindow, ipcMain, shell, clipboard, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard, Menu, dialog, screen } = require('electron');
+const { spawn } = require('child_process');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -10,6 +11,13 @@ const crypto = require('crypto');
 
 const updater = require('./updater');
 const packages = require('./packages');
+const { createStudio } = require('./studio');
+const { createSearch } = require('./search');
+const { createHistory } = require('./history');
+const { createLsp } = require('./lsp');
+const { createGitHub } = require('./github');
+const { createPlaytest } = require('./playtest');
+const { createDiscord } = require('./discord');
 const { createAgent, connectClaude, claudeConnectionState } = require('./agent');
 const { isMac, robloxPluginsDir } = require('./platform');
 const { createChat } = require('./chat');
@@ -19,12 +27,11 @@ const PORT = Number(process.env.BLOXCODE_PORT) || 34872;
 // A dev copy on another port also gets its own profile, so it doesn't collide with the installed app.
 if (process.env.BLOXCODE_PORT) app.setPath('userData', path.join(app.getPath('appData'), 'bloxcode-dev'));
 const POLL_HOLD_MS = 10000;
-
-let agentActivity = null; // { text, time } of Claude's last action
 const CONNECTED_TIMEOUT_MS = 15000;
 
 let win = null;
 let updateReady = null; // version string once an update was downloaded in the background
+let agentActivity = null; // { text, time } of Claude's last action
 
 // ---------- bridge state ----------
 const bridge = {
@@ -41,6 +48,10 @@ const bridge = {
 function isConnected() {
   return !!bridge.activeClient && Date.now() - bridge.lastSeen < CONNECTED_TIMEOUT_MS;
 }
+function placeKey() {
+  const p = bridge.place || {};
+  return p.id ? `place-${p.id}` : `local-${p.name || 'unknown'}`;
+}
 
 function statusPayload() {
   return {
@@ -49,11 +60,16 @@ function statusPayload() {
     port: PORT,
     serverError: bridge.serverError,
     plugin: pluginInstallInfo,
+    pluginVersion: isConnected() ? bridge.pluginVersion : 0,
     version: app.getVersion(),
     updateReady,
     platform: process.platform,
     claude: claudeState,
     agentActivity,
+    lsp: lsp ? lsp.getState() : { state: 'off' },
+    discord: discord ? discord.status : 'off',
+    snapshot: studio ? studio.snapshotProgress : null,
+    playtest: playtest ? playtest.info() : null,
   };
 }
 
@@ -62,11 +78,14 @@ function sendStatus(force) {
   const json = JSON.stringify(statusPayload());
   if (!force && json === lastStatusJson) return;
   lastStatusJson = json;
-  if (win && !win.isDestroyed()) win.webContents.send('bridge:status', JSON.parse(json));
+  send('bridge:status', JSON.parse(json));
 }
 
+function send(channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+}
 function sendEvents(events) {
-  if (win && !win.isDestroyed() && events.length) win.webContents.send('bridge:events', events);
+  if (events.length) send('bridge:events', events);
 }
 
 function flushWaiter() {
@@ -119,6 +138,20 @@ function focusWindow() {
   setTimeout(() => win && !win.isDestroyed() && win.setAlwaysOnTop(false), 150);
 }
 
+/**
+ * Only Roblox Studio and Bloxcode's own MCP server may talk to the bridge, never a website.
+ * Browsers always send Origin or Sec-Fetch headers, can't fake the Host header (DNS rebinding)
+ * and need a CORS preflight for JSON posts, which we never allow.
+ */
+function trustedRequest(req) {
+  const host = String(req.headers.host || '').toLowerCase();
+  const okHost = host === `localhost:${PORT}` || host === `127.0.0.1:${PORT}` || host === `[::1]:${PORT}`;
+  if (!okHost) return false;
+  if (req.headers.origin || req.headers['sec-fetch-mode'] || req.headers['sec-fetch-site']) return false;
+  if (req.method === 'POST' && !/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return false;
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const client = url.searchParams.get('client');
@@ -126,6 +159,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/ping') {
       return json(res, 200, { app: 'bloxcode', session: bridge.session });
     }
+    if (!trustedRequest(req)) return json(res, 403, { error: 'Forbidden' });
 
     if (req.method === 'POST' && url.pathname === '/hello') {
       const body = await readBody(req);
@@ -140,9 +174,10 @@ const server = http.createServer(async (req, res) => {
       bridge.lastSeen = Date.now();
       bridge.queue = [];
       bridge.pluginVersion = Number(body.pluginVersion) || 1;
-      agent.onReset();
+      studio.onReset();
       sendEvents([{ op: 'reset' }]);
       sendStatus(true);
+      updateDiscord();
       return json(res, 200, { session: bridge.session });
     }
 
@@ -176,22 +211,32 @@ const server = http.createServer(async (req, res) => {
       if (client !== bridge.activeClient) return json(res, 409, { error: 'inactive' });
       const body = await readBody(req);
       bridge.lastSeen = Date.now();
-      const events = agent.onEvents(Array.isArray(body.events) ? body.events : []);
-      sendEvents(events);
+      const events = studio.onEvents(Array.isArray(body.events) ? body.events : []);
+      sendEvents(events.filter((e) => e.op !== 'log')); // logs go out through studio.events
       if (events.some((e) => e.op === 'open' && e.focus)) focusWindow();
+      if (events.some((e) => e.op === 'snapProgress')) sendStatus(true);
       return json(res, 200, { ok: true });
     }
 
     if (req.method === 'POST' && url.pathname === '/log') {
-      // output from play-test sessions (they don't take part in the poll loop)
+      // output from play-test sessions of the 2.0 plugin's predecessor
       const body = await readBody(req);
-      agent.onLogs(body.logs);
+      studio.onLogs(body.logs);
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/playtest/poll') {
+      const body = await readBody(req);
+      return json(res, 200, playtest.poll(body));
+    }
+    if (req.method === 'POST' && url.pathname === '/playtest/result') {
+      playtest.result(await readBody(req));
       return json(res, 200, { ok: true });
     }
 
     if (req.method === 'POST' && url.pathname === '/agent') {
-      // Claude, through the MCP server. Browsers send an Origin header; the MCP server doesn't.
-      if (req.headers.origin || !agent.checkToken(req.headers.authorization)) return json(res, 403, { error: 'Forbidden' });
+      // Claude, through the MCP server, with the secret key.
+      if (!agent.checkToken(req.headers.authorization)) return json(res, 403, { error: 'Forbidden' });
       const body = await readBody(req);
       try {
         const result = await agent.call(String(body.tool || ''), body.args);
@@ -206,6 +251,7 @@ const server = http.createServer(async (req, res) => {
         bridge.activeClient = null;
         bridge.place = null;
         sendStatus(true);
+        updateDiscord();
       }
       return json(res, 200, { ok: true });
     }
@@ -223,21 +269,134 @@ server.on('error', (err) => {
   sendStatus(true);
 });
 
-setInterval(() => sendStatus(), 2000);
+let wasConnected = false;
+setInterval(() => {
+  const now = isConnected();
+  if (now !== wasConnected) { wasConnected = now; updateDiscord(); if (!now) lsp.stop(); }
+  sendStatus();
+}, 2000);
 
-// ---------- Claude (MCP) ----------
-const agent = createAgent({
+// ---------- core services ----------
+const userData = app.getPath('userData');
+const studio = createStudio({
   pushCommand: (cmd) => pushCommand(cmd),
-  sendEvents: (events) => sendEvents(events),
   isConnected: () => isConnected(),
   getPlace: () => bridge.place,
   getPluginVersion: () => (isConnected() ? bridge.pluginVersion : 0),
-  packages,
-  userData: app.getPath('userData'),
+});
+studio.events.on('logs', (list) => sendEvents(list.map((l) => ({ op: 'log', ...l }))));
+studio.events.on('logsCleared', () => sendEvents([{ op: 'logsCleared' }]));
+studio.events.on('sourceChanged', ({ id, origin }) => { if (origin !== 'studio') send('history:changed', { id }); });
+
+const search = createSearch(studio);
+const history = createHistory({ userData, studio, placeKey });
+const lsp = createLsp({ userData, studio, placeKey, emit: (channel, payload) => { send(channel, payload); if (channel === 'lsp:state') sendStatus(true); } });
+const github = createGitHub({ userData, studio, placeKey, emit: (channel, payload) => send(channel, payload) });
+const playtest = createPlaytest({ studio, emit: (e) => { send('playtest:state', e); sendStatus(true); } });
+
+// ---------- test mode: Studio in front, a small floating window with Stop and the Output ----------
+let testMode = true;
+let hud = null;
+let hudMode = 'play';
+let focusStudioOnStart = false;
+let testWasRunning = false;
+let testStartSeq = 0;
+
+function focusStudio() {
+  try {
+    if (isMac) {
+      spawn('osascript', ['-e', 'tell application "RobloxStudio" to activate'], { stdio: 'ignore' });
+    } else {
+      const ps = "$p = Get-Process RobloxStudioBeta -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { (New-Object -ComObject WScript.Shell).AppActivate($p.Id) | Out-Null }";
+      spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', ps], { stdio: 'ignore', windowsHide: true });
+    }
+  } catch (_) {}
+}
+
+function hudSend(channel, payload) { if (hud && !hud.isDestroyed()) hud.webContents.send(channel, payload); }
+
+function openHud() {
+  if (hud && !hud.isDestroyed()) { hud.showInactive(); return; }
+  const wa = screen.getPrimaryDisplay().workArea;
+  hud = new BrowserWindow({
+    width: 400, height: 260, minWidth: 300, minHeight: 180,
+    x: wa.x + wa.width - 420, y: wa.y + wa.height - 280,
+    frame: false, alwaysOnTop: true, resizable: true, show: false, skipTaskbar: false,
+    backgroundColor: '#11131f', title: 'Bloxcode · Play test', icon: path.join(__dirname, 'icon.png'),
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+  });
+  hud.setAlwaysOnTop(true, 'floating');
+  hud.loadFile(path.join(__dirname, 'renderer', 'testhud.html'));
+  hud.webContents.once('did-finish-load', () => {
+    hudSend('hud:state', { running: true, mode: hudMode, since: Date.now(), reset: true });
+    // the output of the test so far
+    for (const l of studio.logs.filter((x) => x.seq > testStartSeq && x.context !== 'edit')) hudSend('hud:log', l);
+    hud.showInactive();
+    // Dev helper: BLOXCODE_HUD_SHOT=file.png saves a picture of this window.
+    if (process.env.BLOXCODE_HUD_SHOT) setTimeout(async () => { try { fs.writeFileSync(process.env.BLOXCODE_HUD_SHOT, (await hud.webContents.capturePage()).toPNG()); } catch (_) {} }, 4500);
+  });
+  hud.on('closed', () => { hud = null; });
+}
+
+setInterval(() => {
+  const running = playtest.isRunning();
+  if (running === testWasRunning) return;
+  testWasRunning = running;
+  if (running) {
+    testStartSeq = studio.logSeq - 20; // include what was printed while the test started
+    if (testMode) {
+      if (focusStudioOnStart) focusStudio();
+      openHud();
+    }
+  } else {
+    hudSend('hud:state', { running: false });
+    if (testMode && focusStudioOnStart) focusWindow();
+    focusStudioOnStart = false;
+    setTimeout(() => { if (hud && !hud.isDestroyed() && !playtest.isRunning()) hud.close(); }, 4000);
+  }
+}, 400);
+
+studio.events.on('logs', (list) => { if (hud) for (const l of list) if (l.context !== 'edit') hudSend('hud:log', l); });
+ipcMain.on('hud:stop', () => playtest.stop());
+ipcMain.on('hud:back', () => focusWindow());
+ipcMain.on('hud:close', () => { if (hud && !hud.isDestroyed()) hud.close(); });
+const discord = createDiscord({ onState: () => sendStatus(true) });
+
+// ---------- review of Claude's changes ----------
+let reviewClaude = false;
+const reviews = new Map();
+let reviewCounter = 0;
+function review(changes, title) {
+  if (!reviewClaude || !win || win.isDestroyed()) return Promise.resolve({ accepted: true });
+  const reqId = 'v' + (++reviewCounter);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { reviews.delete(reqId); send('review:cancel', { reqId }); resolve({ accepted: false, note: 'The user did not answer within 15 minutes.' }); }, 15 * 60 * 1000);
+    reviews.set(reqId, { resolve, timer });
+    send('review:request', { reqId, title, changes });
+    focusWindow();
+  });
+}
+ipcMain.on('review:answer', (_e, { reqId, accepted, note }) => {
+  const r = reviews.get(reqId);
+  if (!r) return;
+  reviews.delete(reqId);
+  clearTimeout(r.timer);
+  r.resolve({ accepted: !!accepted, note: note || '' });
+});
+
+async function editorState() {
+  if (!win || win.isDestroyed()) return null;
+  try { return await win.webContents.executeJavaScript('window.__editorState ? window.__editorState() : null'); } catch (_) { return null; }
+}
+
+// ---------- Claude (MCP) ----------
+const agent = createAgent({
+  studio, search, history, lsp, github, playtest, packages, userData, review, editorState,
   onActivity: (text) => {
     agentActivity = { text, time: Date.now() };
     sendEvents([{ op: 'agent', text }]);
     sendStatus(true);
+    updateDiscord();
   },
 });
 
@@ -261,9 +420,16 @@ function mcpServerConfig() {
 const chat = createChat({
   agent,
   mcpServerConfig,
-  userData: app.getPath('userData'),
-  emit: (event) => { if (win && !win.isDestroyed()) win.webContents.send('chat:event', event); },
+  userData,
+  emit: (event) => send('chat:event', event),
 });
+
+// ---------- Discord ----------
+let discordFile = null;
+function updateDiscord() {
+  const recentClaude = agentActivity && Date.now() - agentActivity.time < 120000;
+  discord.update({ file: discordFile, place: bridge.place && isConnected() ? bridge.place.name : null, connected: isConnected(), claude: recentClaude });
+}
 
 // ---------- Studio plugin install ----------
 let pluginInstallInfo = { installed: false, path: null, error: null, updated: false };
@@ -341,6 +507,14 @@ function createWindow(splash) {
   });
   win.on('closed', () => { win = null; });
 
+  // Dev helper: print renderer errors to the terminal.
+  if (process.env.BLOXCODE_SHOT || process.env.BLOXCODE_LOG_RENDERER) {
+    win.webContents.on('console-message', (e) => {
+      const level = e.level ?? e.params?.level;
+      if (level === 'error' || level === 'warning' || level >= 2) console.log(`[renderer ${level}] ${e.message ?? e.params?.message} (${e.sourceId ?? ''}:${e.lineNumber ?? ''})`);
+    });
+  }
+
   // Dev helper: BLOXCODE_SHOT=path.png[|delayMs[|js]] saves a screenshot, then quits.
   if (process.env.BLOXCODE_SHOT) {
     const [file, delay, js] = process.env.BLOXCODE_SHOT.split('|');
@@ -353,37 +527,40 @@ function createWindow(splash) {
   }
 }
 
+// ---------- IPC ----------
+const handle = (channel, fn) => ipcMain.handle(channel, (_e, ...args) => fn(...args));
+
 ipcMain.on('bridge:command', (_e, cmd) => {
-  if (cmd && typeof cmd === 'object') pushCommand(cmd);
+  if (!cmd || typeof cmd !== 'object') return;
+  // Your own typing: keep the cache and history up to date.
+  if (cmd.type === 'setSource') studio.noteSource(cmd.id, cmd.source, 'you');
+  pushCommand(cmd);
 });
-ipcMain.handle('bridge:getStatus', () => statusPayload());
-ipcMain.handle('plugin:install', () => { const r = installPlugin(); sendStatus(true); return r; });
-ipcMain.handle('plugin:openFolder', () => {
-  const dir = robloxPluginsDir();
-  return shell.openPath(dir);
-});
+handle('bridge:getStatus', () => statusPayload());
+handle('plugin:install', () => { const r = installPlugin(); sendStatus(true); return r; });
+handle('plugin:openFolder', () => shell.openPath(robloxPluginsDir()));
 ipcMain.on('app:restartToUpdate', () => updater.restartToUpdate());
-ipcMain.handle('packages:search', (_e, query) => packages.search(String(query || '')));
-ipcMain.handle('packages:install', async (_e, spec) => {
+handle('packages:search', (query) => packages.search(String(query || '')));
+handle('packages:install', async (spec) => {
   if (!isConnected()) throw new Error('Not connected to Roblox Studio.');
-  const progress = (text) => win && !win.isDestroyed() && win.webContents.send('packages:progress', { spec, text });
+  const progress = (text) => send('packages:progress', { spec, text });
   const { command, summary } = await packages.buildInstall(String(spec), progress);
   progress(`Adding ${summary.name} to Studio…`);
   pushCommand(command);
   return summary;
 });
-ipcMain.handle('claude:connect', () => {
+handle('claude:connect', () => {
   const r = connectClaude(mcpServerConfig());
   refreshClaudeState();
   sendStatus(true);
   return r;
 });
-ipcMain.handle('chat:state', () => chat.state());
-ipcMain.handle('chat:detect', () => chat.detectClaudeCode());
-ipcMain.handle('chat:setMode', (_e, mode) => chat.setMode(mode));
-ipcMain.handle('chat:saveKey', (_e, key) => chat.setApiKey(key));
-ipcMain.handle('chat:clearKey', () => chat.clearApiKey());
-ipcMain.handle('chat:send', (_e, text) => chat.send(text));
+handle('chat:state', () => chat.state());
+handle('chat:detect', () => chat.detectClaudeCode());
+handle('chat:setMode', (mode) => chat.setMode(mode));
+handle('chat:saveKey', (key) => chat.setApiKey(key));
+handle('chat:clearKey', () => chat.clearApiKey());
+handle('chat:send', (text) => chat.send(text));
 ipcMain.on('chat:stop', () => chat.stop());
 ipcMain.on('chat:reset', () => chat.reset());
 ipcMain.on('chat:install', () => chat.openInstallTerminal());
@@ -391,6 +568,77 @@ ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(String(text)));
 ipcMain.on('window:titleColor', (_e, colors) => {
   if (isMac) return;
   try { win && win.setTitleBarOverlay(colors); } catch (_) {}
+});
+
+// settings that the main process needs
+ipcMain.on('settings:apply', (_e, s) => {
+  if (!s || typeof s !== 'object') return;
+  if ('lsp' in s) lsp.setEnabled(!!s.lsp);
+  if ('reviewClaude' in s) reviewClaude = !!s.reviewClaude;
+  if ('testMode' in s) testMode = !!s.testMode;
+  if ('discord' in s) discord.setEnabled(!!s.discord, s.discordOptions);
+  updateDiscord();
+});
+ipcMain.on('discord:file', (_e, file) => { discordFile = file ? String(file).slice(0, 100) : null; updateDiscord(); });
+
+// search, replace, history
+handle('search:run', (opts) => search.search(opts || {}, (done, total) => send('search:progress', { done, total })));
+handle('search:replace', (opts) => search.replace(opts || {}, 'replace'));
+handle('history:list', (scriptPath) => history.list(String(scriptPath)));
+handle('history:get', (scriptPath, index) => history.get(String(scriptPath), Number(index)));
+handle('history:restore', async (id, index) => {
+  const p = studio.pathOf(id);
+  const source = history.get(p, Number(index));
+  await studio.writeSource(id, source, 'restore');
+  return source;
+});
+handle('sources:get', (id) => studio.readSource(String(id)));
+ipcMain.on('history:record', (_e, id, source) => { if (studio.isScript(id)) history.record(studio.pathOf(id), String(source), 'you'); });
+
+// properties
+handle('props:get', (id) => studio.ask({ type: 'getProperties', id }));
+handle('props:set', (id, properties, attributes) => studio.ask({ type: 'setProperties', id, properties, attributes }));
+handle('props:tags', (id, addTags, removeTags) => studio.ask({ type: 'setProperties', id, addTags, removeTags }));
+
+// language server
+handle('lsp:call', (kind, id, line, col, extra) => lsp.call(kind, id, line, col, extra));
+handle('lsp:symbols', (id) => lsp.symbols(id));
+handle('lsp:diagnostics', () => lsp.allDiagnostics());
+handle('lsp:applyRename', async (sources) => studio.writeSources(sources, 'Rename symbol', 'you'));
+ipcMain.on('lsp:text', (_e, id, text) => lsp.updateText(id, String(text)));
+handle('lsp:restart', async () => { lsp.stop(); await lsp.start(); return lsp.getState(); });
+
+// output
+ipcMain.on('output:clear', () => studio.clearLogs());
+handle('output:all', () => studio.logs);
+
+// play tests
+handle('playtest:start', (mode, fromButton) => { hudMode = mode === 'run' ? 'run' : 'play'; focusStudioOnStart = !!fromButton; return playtest.start(mode); });
+handle('playtest:stop', () => playtest.stop());
+
+// GitHub
+handle('github:state', () => github.state());
+handle('github:token', (t) => github.signInWithToken(t));
+handle('github:device', () => github.startDeviceFlow());
+handle('github:signOut', () => github.signOut());
+handle('github:create', (opts) => github.createRepo(opts || {}));
+handle('github:link', (full) => github.linkRepo(full));
+handle('github:unlink', () => github.unlink());
+handle('github:repos', () => github.repos());
+handle('github:status', () => github.status());
+handle('github:publish', (message) => github.publish(message));
+
+// themes
+handle('theme:export', async (theme) => {
+  const r = await dialog.showSaveDialog(win, { title: 'Export theme', defaultPath: `${String(theme.name || 'theme').replace(/[^\w-]+/g, '-')}.bloxcode-theme.json`, filters: [{ name: 'Bloxcode theme', extensions: ['json'] }] });
+  if (r.canceled || !r.filePath) return false;
+  fs.writeFileSync(r.filePath, JSON.stringify(theme, null, 2));
+  return true;
+});
+handle('theme:import', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Import theme', properties: ['openFile'], filters: [{ name: 'Bloxcode theme', extensions: ['json'] }] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  return JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
 });
 
 if (!app.requestSingleInstanceLock()) {
@@ -408,5 +656,5 @@ if (!app.requestSingleInstanceLock()) {
       sendStatus(true);
     });
   });
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', () => { history.flush(); lsp.stop(); app.quit(); });
 }

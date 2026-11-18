@@ -27,10 +27,84 @@ local RunService = game:GetService("RunService")
 local LogService = game:GetService("LogService")
 local CollectionService = game:GetService("CollectionService")
 
-local LOG_URL = "http://localhost:34872/log"
+local StudioTestService = game:GetService("StudioTestService")
 
--- Plugins also load inside Play-test sessions. Those only forward the output to Bloxcode;
--- everything else runs in the edit DataModel.
+local ROOT_URL = "http://localhost:34872"
+
+local function postJson(path: string, body: any): any?
+	local ok, res = pcall(function()
+		return HttpService:RequestAsync({
+			Url = ROOT_URL .. path,
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = HttpService:JSONEncode(body),
+		})
+	end)
+	if ok and res.Success then
+		local okJson, data = pcall(function()
+			return HttpService:JSONDecode(res.Body)
+		end)
+		return okJson and data or nil
+	end
+	return nil
+end
+
+local function describe(v: any): string
+	local kind = typeof(v)
+	if kind == "Instance" then
+		local ok, full = pcall(function()
+			return v:GetFullName()
+		end)
+		return (ok and full or tostring(v)) .. " [" .. v.ClassName .. "]"
+	elseif kind == "table" then
+		local ok, encoded = pcall(function()
+			return HttpService:JSONEncode(v)
+		end)
+		return ok and encoded or tostring(v)
+	end
+	return tostring(v)
+end
+
+--[=[
+	Runs a piece of Luau and returns what it printed and returned. Used by Claude's
+	run_code tool, in edit mode and inside play tests.
+	@within CodeBridge
+	@private
+]=]
+local function runLuau(code: string): (boolean, string, { string })
+	local output = {}
+	local function capture(kind)
+		return function(...)
+			local parts = {}
+			for i = 1, select("#", ...) do
+				parts[i] = describe((select(i, ...)))
+			end
+			table.insert(output, kind .. table.concat(parts, " "))
+		end
+	end
+	local load = (loadstring :: any)
+	if typeof(load) ~= "function" then
+		return false, "This Studio version does not let plugins run code (loadstring is missing).", output
+	end
+	local fn, compileError = load(code, "=run_code")
+	if not fn then
+		return false, "Syntax error: " .. tostring(compileError), output
+	end
+	local env = setmetatable({ print = capture(""), warn = capture("WARN: ") }, { __index = getfenv(1) })
+	setfenv(fn, env)
+	local results = table.pack(pcall(fn))
+	if not results[1] then
+		return false, tostring(results[2]), output
+	end
+	local returned = {}
+	for i = 2, results.n do
+		table.insert(returned, describe(results[i]))
+	end
+	return true, table.concat(returned, ", "), output
+end
+
+-- Plugins also load inside play-test sessions. There they forward the output to Bloxcode,
+-- run code Claude sends into the running game, and end the test when asked.
 if not RunService:IsEdit() then
 	if not plugin:GetSetting("BloxcodeCodeMode") then
 		return
@@ -44,18 +118,20 @@ if not RunService:IsEdit() then
 	end)
 	task.spawn(function()
 		while true do
-			task.wait(0.5)
-			if #pending > 0 then
-				local batch = pending
-				pending = {}
-				pcall(function()
-					HttpService:RequestAsync({
-						Url = LOG_URL,
-						Method = "POST",
-						Headers = { ["Content-Type"] = "application/json" },
-						Body = HttpService:JSONEncode({ logs = batch }),
-					})
-				end)
+			task.wait(0.4)
+			local batch = pending
+			pending = {}
+			local res = postJson("/playtest/poll", { context = context, logs = batch })
+			if res then
+				for _, job in res.run or {} do
+					local ok, result, output = runLuau(job.code)
+					postJson("/playtest/result", { reqId = job.reqId, ok = ok, result = result, output = output, context = context })
+				end
+				if res.stop and context == "server" then
+					pcall(function()
+						StudioTestService:EndTest(res.stopResult or "Stopped by Bloxcode")
+					end)
+				end
 			end
 		end
 	end)
@@ -69,7 +145,7 @@ end
 	Version of the plugin protocol. Bloxcode uses it to tell you when Studio
 	still runs an older copy of the plugin.
 ]=]
-local PLUGIN_VERSION = 2
+local PLUGIN_VERSION = 3
 
 --[=[
 	@prop BASE_URL string
@@ -282,9 +358,6 @@ local function track(inst: Instance)
 			table.insert(
 				list,
 				inst:GetPropertyChangedSignal("Source"):Connect(function()
-					if not openInApp[id] then
-						return
-					end
 					local src = inst.Source
 					if src ~= lastSource[id] then
 						lastSource[id] = src
@@ -318,31 +391,69 @@ local function onRemoving(inst)
 	untrack(inst)
 end
 
---[=[
-	Sends the whole Explorer tree to Bloxcode (for example after connecting).
-	@within CodeBridge
-	@private
-]=]
+-- Sends the whole Explorer tree to Bloxcode (for example after connecting).
+local SNAP_CHUNK = 2500
+local KEEP_ON_SNAPSHOT = { reply = true, log = true, open = true, error = true, info = true, created = true, playtest = true }
+
 local function sendSnapshot()
+	-- Tree events from before are replaced by the snapshot, but answers to Claude,
+	-- output and opened scripts must survive it.
+	local kept = {}
+	for _, e in outbox do
+		if KEEP_ON_SNAPSHOT[e.op] then
+			table.insert(kept, e)
+		end
+	end
 	outbox = { { op = "reset" } }
-	local count = 0
+	for _, e in kept do
+		push(e)
+	end
+
+	local services = {}
+	local total = 0
 	for _, serviceName in TRACKED_SERVICES do
 		local ok, service = pcall(function()
 			return game:GetService(serviceName)
 		end)
 		if ok and service then
-			push(nodeEvent(service))
-			track(service)
-			for _, d in service:GetDescendants() do
-				push(nodeEvent(d))
-				track(d)
-				count += 1
-				if count % 3000 == 0 then
-					task.wait()
-				end
+			local list = service:GetDescendants()
+			table.insert(services, { service = service, list = list })
+			total += #list + 1
+		end
+	end
+
+	-- Compact rows { id, name, className, parentId } instead of one event per instance.
+	local chunk = {}
+	local done = 0
+	local started = os.clock()
+	local function add(inst)
+		local parent = inst.Parent
+		table.insert(chunk, { getId(inst), safeName(inst), inst.ClassName, (parent and parent ~= game) and getId(parent) or nil })
+		track(inst)
+		done += 1
+		if #chunk >= SNAP_CHUNK then
+			push({ op = "snap", nodes = chunk })
+			push({ op = "snapProgress", done = done, total = total })
+			chunk = {}
+		end
+		-- Stay responsive: never block Studio for more than a frame.
+		if os.clock() - started > 0.012 then
+			task.wait()
+			started = os.clock()
+		end
+	end
+	for _, entry in services do
+		add(entry.service)
+		for _, d in entry.list do
+			if d.Parent then
+				add(d)
 			end
 		end
 	end
+	if #chunk > 0 then
+		push({ op = "snap", nodes = chunk })
+	end
+	push({ op = "snapProgress", done = total, total = total })
 end
 
 local logConn = nil
@@ -877,6 +988,181 @@ function commands.setProperties(cmd: any)
 		end
 	end)
 	return nil
+end
+
+--[=[
+	Returns the source of many scripts at once (for search, history and type checking).
+	@within CodeBridge
+	@private
+]=]
+function commands.readMany(cmd: any)
+	local out = {}
+	for _, id in cmd.ids or {} do
+		local inst = byId[id]
+		if inst and isScript(inst) then
+			out[id] = readSource(inst)
+		end
+	end
+	return out
+end
+
+--[=[
+	Changes the source of several scripts in one undo step (Replace All, renames, restores).
+	@within CodeBridge
+	@private
+]=]
+function commands.setSources(cmd: any)
+	local changed = 0
+	withRecording(cmd.label or "Edit scripts", function()
+		for id, source in cmd.sources or {} do
+			local inst = byId[id]
+			if inst and isScript(inst) then
+				lastSource[id] = source
+				local ok = pcall(function()
+					ScriptEditorService:UpdateSourceAsync(inst, function()
+						return source
+					end)
+				end)
+				if not ok then
+					(inst :: any).Source = source
+				end
+				changed += 1
+			end
+		end
+	end)
+	return { changed = changed }
+end
+
+function commands.undo()
+	ChangeHistoryService:Undo()
+	return nil
+end
+
+function commands.redo()
+	ChangeHistoryService:Redo()
+	return nil
+end
+
+--[=[
+	Runs Luau in the edit DataModel (Claude's run_code tool). The change is one undo step.
+	@within CodeBridge
+	@private
+]=]
+function commands.runCode(cmd: any)
+	local ok, result, output
+	withRecording("Run code", function()
+		ok, result, output = runLuau(tostring(cmd.code or ""))
+	end)
+	return { ok = ok, result = result, output = output }
+end
+
+local playtestRunning = false
+
+--[=[
+	Starts a play test (Play or Run) with StudioTestService. Returns right away; Bloxcode
+	gets a playtest event when the test ends.
+	@within CodeBridge
+	@private
+]=]
+function commands.startPlaytest(cmd: any)
+	if playtestRunning then
+		error("A play test started by Bloxcode is already running.", 0)
+	end
+	playtestRunning = true
+	task.spawn(function()
+		local ok, result = pcall(function()
+			if cmd.mode == "run" then
+				return StudioTestService:ExecuteRunModeAsync(cmd.args)
+			end
+			return StudioTestService:ExecutePlayModeAsync(cmd.args)
+		end)
+		playtestRunning = false
+		push({ op = "playtest", state = "ended", ok = ok, result = describe(result) })
+	end)
+	return { started = true }
+end
+
+--[=[
+	Inserts a Roblox asset (model, mesh, …) by id, like the Toolbox does.
+	@within CodeBridge
+	@private
+]=]
+function commands.insertAsset(cmd: any)
+	local parent = byId[cmd.parentId] or workspace
+	local inserted = {}
+	withRecording("Insert asset", function()
+		local model = game:GetService("InsertService"):LoadAsset(tonumber(cmd.assetId) :: number)
+		for _, child in model:GetChildren() do
+			child.Parent = parent
+			push(nodeEvent(child))
+			track(child)
+			table.insert(inserted, { id = getId(child), path = pathOf(child), className = child.ClassName })
+		end
+		model:Destroy()
+	end)
+	return inserted
+end
+
+-- Builds { class, name, properties?, attributes?, tags?, source?, children? } trees.
+local function buildTree(spec: any, parent: Instance, created: { any })
+	local inst = Instance.new(spec.class)
+	inst.Name = spec.name or spec.class
+	if spec.source and inst:IsA("LuaSourceContainer") then
+		(inst :: any).Source = spec.source
+	end
+	if spec.properties then
+		setProps(inst, spec.properties)
+	end
+	for key, value in spec.attributes or {} do
+		inst:SetAttribute(key, value)
+	end
+	for _, tag in spec.tags or {} do
+		CollectionService:AddTag(inst, tag)
+	end
+	for _, child in spec.children or {} do
+		buildTree(child, inst, created)
+	end
+	inst.Parent = parent
+	table.insert(created, inst)
+	return inst
+end
+
+--[=[
+	Creates a whole tree of instances (a GUI, a model, a folder of scripts) in one undo step.
+	@within CodeBridge
+	@private
+]=]
+function commands.createTree(cmd: any)
+	local parent = byId[cmd.parentId]
+	if not parent then
+		error("Target not found.", 0)
+	end
+	local created = {}
+	local root
+	withRecording("Create " .. tostring(cmd.tree and cmd.tree.name), function()
+		root = buildTree(cmd.tree, parent, created)
+	end)
+	if not root then
+		return nil
+	end
+	-- the parent's DescendantAdded already reported them; make sure ids exist
+	for _, inst in created do
+		getId(inst)
+		track(inst)
+	end
+	return { id = getId(root), path = pathOf(root), count = #created }
+end
+
+function commands.setSelection(cmd: any)
+	local list = {}
+	for _, id in cmd.ids or {} do
+		local inst = byId[id]
+		if inst then
+			table.insert(list, inst)
+		end
+	end
+	Selection:Set(list)
+	return { selected = #list }
 end
 
 local function runCommand(cmd)

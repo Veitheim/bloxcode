@@ -272,6 +272,15 @@ window.setupLuau = function setupLuau(getTreeContext) {
       const before = model.getValueInRange(new monaco.Range(position.lineNumber, 1, position.lineNumber, word.startColumn));
       const suggestions = [];
 
+      // With the Luau language server running, it suggests everything; only add the snippets.
+      if (window.__lspReady && window.__lspReady()) {
+        if (/[.:"']$/.test(before)) return { suggestions };
+        SNIPPETS.forEach(([label, body, doc]) => suggestions.push(item(label, K.Snippet, range, {
+          insertText: body, insertTextRules: S, documentation: doc, detail: 'Snippet', sortText: '~' + label,
+        })));
+        return { suggestions };
+      }
+
       // GetService("…")
       if (/GetService\(\s*["']$/.test(before)) {
         SERVICES.forEach((s) => suggestions.push(item(s, K.Module, range)));

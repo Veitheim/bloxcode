@@ -1,0 +1,18 @@
+{
+  "mode": "none",
+
+  "_pfx": "--- mode: pfx (certificate file) ---",
+  "certificateFile": "C:\\path\\to\\certificate.pfx",
+  "certificatePassword": "",
+
+  "_store": "--- mode: store (Certum SimplySign, USB token) ---",
+  "certificateSha1": "",
+  "certificateSubjectName": "",
+
+  "_azure": "--- mode: azure (Microsoft Artifact Signing) ---",
+  "endpoint": "https://weu.codesigning.azure.net/",
+  "accountName": "",
+  "certificateProfile": "",
+
+  "timestampServer": "http://timestamp.digicert.com"
+}

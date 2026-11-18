@@ -14,6 +14,8 @@
 	| `POST` | `/events?client=…` | Events for Bloxcode. Body: `{ events: { Event } }` |
 	| `POST` | `/bye?client=…` | Disconnect |
 	| `POST` | `/log` | Output from play-test sessions. Body: `{ logs: { { message, kind, context } } }` |
+	| `POST` | `/playtest/poll` | Plugin copies inside a play test: send output, get code to run and the stop signal (v3) |
+	| `POST` | `/playtest/result` | Result of code that ran inside a play test (v3) |
 	| `POST` | `/agent` | Tool calls from the Bloxcode MCP server (Claude). Needs `Authorization: Bearer <key>`; requests with an `Origin` header are refused |
 	| `GET` | `/ping` | Check whether Bloxcode is running |
 
@@ -27,7 +29,7 @@
 	.clientId string -- random ID per Studio window
 	.placeName string
 	.placeId number
-	.pluginVersion number? -- 2 since Bloxcode 1.2 (replies, output, properties)
+	.pluginVersion number? -- 2 since Bloxcode 1.2 (replies, output, properties), 3 since 2.0 (fast snapshots, play tests, run code, undo)
 ]=]
 
 --[=[
@@ -41,7 +43,7 @@
 --[=[
 	@interface Event
 	@within Protocol
-	.op "reset" | "add" | "remove" | "rename" | "move" | "open" | "source" | "created" | "error" | "log" | "reply"
+	.op "reset" | "add" | "remove" | "rename" | "move" | "open" | "source" | "created" | "error" | "log" | "reply" | "snap" | "snapProgress" | "playtest"
 	.id string? -- instance ID
 	.name string? -- for add, rename, open
 	.cls string? -- ClassName, for add and open
@@ -62,7 +64,7 @@
 --[=[
 	@interface Command
 	@within Protocol
-	.type "snapshot" | "open" | "closed" | "setSource" | "create" | "rename" | "move" | "duplicate" | "delete" | "select" | "wallyInstall" | "read" | "search" | "selection" | "getProperties" | "setProperties"
+	.type "snapshot" | "open" | "closed" | "setSource" | "create" | "rename" | "move" | "duplicate" | "delete" | "select" | "wallyInstall" | "read" | "search" | "selection" | "getProperties" | "setProperties" | "readMany" | "setSources" | "undo" | "redo" | "runCode" | "startPlaytest" | "insertAsset" | "createTree" | "setSelection"
 	.reqId string? -- when set, the plugin answers with a reply event
 	.id string? -- target instance
 	.parentId string? -- for create and move

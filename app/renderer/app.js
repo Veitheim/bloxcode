@@ -2,6 +2,8 @@
 'use strict';
 
 const $ = (s) => document.querySelector(s);
+// Monaco cancels diffs and suggestions when they are replaced; that is expected, not an error.
+addEventListener('unhandledrejection', (e) => { const m = String(e.reason && (e.reason.message || e.reason.name) || ''); if (/^(Canceled|no diff result available)/.test(m)) e.preventDefault(); });
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // macOS: Cmd instead of Ctrl (Ctrl+Tab stays, Cmd+Tab belongs to the system).
@@ -212,7 +214,7 @@ function renderTree() {
     html += `<div class="${cls.join(' ')}" data-id="${esc(n.id)}" draggable="${n.parent ? 'true' : 'false'}" style="top:${i * ROW_H}px;padding-left:${depth * 12 + 4}px">` +
       guides +
       `<span class="twist">${hasKids ? CHEVRON : ''}</span>${classIcon(n.cls)}` +
-      `<span class="name">${highlight(n.name)}</span></div>`;
+      `<span class="name">${highlight(n.name)}</span>${typeof diagBadge === 'function' ? diagBadge(n.id) : ''}</div>`;
   }
   spacer.innerHTML = html;
   renderEmptyState();
@@ -549,13 +551,68 @@ function newScriptFlow() {
 // =====================================================================
 // Editor, tabs & documents
 // =====================================================================
-let editor = null;
-const docs = new Map(); // id -> { id, name, cls, model, viewState, dirty, deleted, timer, applying, lastSynced, loading }
-let tabOrder = [];
-let activeId = null;
+let editor = null; // editor of the focused group
+const docs = new Map(); // id -> { id, name, cls, model, viewStates, dirty, deleted, timer, applying, lastSynced }
+let tabOrder = []; // tabs of the focused group
+let activeId = null; // active script of the focused group
 let autoSync = loadSetting('autoSync', true);
 let pendingOpen = new Map(); // id -> preview flag
-const tabsEl = $('#tabs');
+const pendingReveal = new Map(); // id -> { line, col, endLine, endCol }
+
+// Editor groups (split editor). The focused group's state lives in editor / tabOrder / activeId.
+const groups = [{ index: 0, el: document.querySelector('.group[data-group="0"]'), editor: null, tabOrder: [], activeId: null }];
+let focused = 0;
+function syncFocused() { const g = groups[focused]; g.editor = editor; g.tabOrder = tabOrder; g.activeId = activeId; }
+function focusGroup(i) {
+  if (i === focused || !groups[i]) return;
+  syncFocused();
+  focused = i;
+  const g = groups[i];
+  editor = g.editor; tabOrder = g.tabOrder; activeId = g.activeId;
+  groups.forEach((x) => x.el.classList.toggle('focused', x.index === i));
+  scheduleRender(); updatePos(); onActiveChanged();
+}
+function groupsWith(id) { syncFocused(); return groups.filter((g) => g.tabOrder.includes(id)); }
+
+function splitEditor(id = activeId) {
+  if (groups.length > 1) { focusGroup(1); if (id) activate(id); return; }
+  const el = document.createElement('div');
+  el.className = 'group';
+  el.dataset.group = '1';
+  el.innerHTML = '<div class="tabs"></div><div class="breadcrumbs"></div><div class="editor-host"></div>';
+  $('#groups').appendChild(el);
+  const g = { index: 1, el, editor: null, tabOrder: [], activeId: null };
+  groups.push(g);
+  g.editor = createGroupEditor(g);
+  focusGroup(1);
+  if (id) activate(id);
+}
+function closeSplit() {
+  if (groups.length < 2) return;
+  syncFocused();
+  const g = groups[1];
+  for (const id of [...g.tabOrder]) {
+    if (!groups[0].tabOrder.includes(id)) groups[0].tabOrder.push(id);
+  }
+  if (focused === 1) focusGroup(0);
+  g.editor.dispose();
+  g.el.remove();
+  groups.length = 1;
+  tabOrder = groups[0].tabOrder;
+  if (!activeId && tabOrder.length) activate(tabOrder[0]);
+  scheduleRender(); updateWelcome();
+}
+function updateWelcome() {
+  syncFocused();
+  const any = groups.some((g) => g.tabOrder.length);
+  $('#welcome').classList.toggle('hidden', any);
+}
+function onActiveChanged() {
+  const d = activeId && docs.get(activeId);
+  const ext = d ? (d.cls === 'Script' ? '.server.luau' : d.cls === 'LocalScript' ? '.client.luau' : '.luau') : '';
+  bridge.post('discord:file', d ? d.name + ext : null);
+  if (typeof onActiveScriptChanged === 'function') onActiveScriptChanged(activeId);
+}
 
 function openFromTree(id, preview) {
   const n = tree.nodes.get(id);
@@ -576,7 +633,9 @@ function handleOpenEvent(e) {
     model.updateOptions({ tabSize: 4, insertSpaces: false });
     doc = { id: e.id, name: e.name, cls: e.cls, model, viewState: null, dirty: false, deleted: false, timer: null, applying: false, lastSynced: e.source || '' };
     model.onDidChangeContent(() => onLocalEdit(doc));
+    doc.viewStates = {};
     docs.set(e.id, doc);
+    if (typeof onDocOpened === 'function') onDocOpened(doc);
     const insertAt = activeId ? tabOrder.indexOf(activeId) + 1 : tabOrder.length;
     tabOrder.splice(insertAt, 0, e.id);
   }
@@ -584,6 +643,23 @@ function handleOpenEvent(e) {
   if (e.agent && activeId && activeId !== e.id && Date.now() - lastTyped < 5000) { scheduleRender(); return; }
   activate(e.id);
   if (tree.nodes.has(e.id)) select(e.id, true);
+  if (pendingReveal.has(e.id)) { const p = pendingReveal.get(e.id); pendingReveal.delete(e.id); setTimeout(() => revealPos(p), 30); }
+}
+
+/** Opens a script (if needed) and jumps to a position. */
+function openAt(id, line, col = 1, endLine, endCol) {
+  if (!id) return;
+  const pos = { line, col, endLine, endCol };
+  if (docs.has(id)) { activate(id); revealPos(pos); return; }
+  pendingReveal.set(id, pos);
+  openFromTree(id, false);
+}
+function revealPos(pos) {
+  if (!editor || !pos || !pos.line) return;
+  const range = new monaco.Range(pos.line, pos.col || 1, pos.endLine || pos.line, pos.endCol || pos.col || 1);
+  editor.setSelection(range);
+  editor.revealRangeInCenterIfOutsideViewport(range);
+  editor.focus();
 }
 
 let lastTyped = 0;
@@ -591,6 +667,7 @@ function onLocalEdit(doc) {
   if (doc.applying) return;
   lastTyped = Date.now();
   doc.dirty = doc.model.getValue() !== doc.lastSynced;
+  if (typeof lspNotify === 'function') lspNotify(doc);
   scheduleRender();
   if (autoSync) {
     clearTimeout(doc.timer);
@@ -631,85 +708,122 @@ function applyRemoteSource(doc, source) {
 function activate(id) {
   const doc = docs.get(id);
   if (!doc) return;
-  if (activeId && docs.has(activeId)) docs.get(activeId).viewState = editor.saveViewState();
+  if (!tabOrder.includes(id)) {
+    const at = activeId ? tabOrder.indexOf(activeId) + 1 : tabOrder.length;
+    tabOrder.splice(at, 0, id);
+  }
+  if (activeId && docs.has(activeId)) docs.get(activeId).viewStates[focused] = editor.saveViewState();
   activeId = id;
   editor.setModel(doc.model);
-  if (doc.viewState) editor.restoreViewState(doc.viewState);
+  if (doc.viewStates[focused]) editor.restoreViewState(doc.viewStates[focused]);
   editor.focus();
-  $('#welcome').classList.add('hidden');
+  updateWelcome();
   scheduleRender();
   updatePos();
+  onActiveChanged();
 }
 
-function closeDoc(id) {
+function closeDoc(id, groupIndex = focused) {
+  if (groupIndex !== focused) focusGroup(groupIndex);
   const doc = docs.get(id);
   if (!doc) return;
-  if (doc.dirty && !doc.deleted) {
+  const elsewhere = groupsWith(id).some((g) => g.index !== focused);
+  if (!elsewhere && doc.dirty && !doc.deleted) {
     const answer = confirm(`"${doc.name}" has changes that were not sent to Studio yet.\n\nOK = send and close, Cancel = keep open`);
     if (!answer) return;
     syncDoc(doc);
   }
-  clearTimeout(doc.timer);
   const idx = tabOrder.indexOf(id);
+  if (idx < 0) return;
   tabOrder.splice(idx, 1);
-  docs.delete(id);
-  bridge.send({ type: 'closed', id });
+  if (!elsewhere) {
+    clearTimeout(doc.timer);
+    docs.delete(id);
+    bridge.send({ type: 'closed', id });
+  }
   if (activeId === id) {
     activeId = null;
     const next = tabOrder[Math.min(idx, tabOrder.length - 1)];
     if (next) activate(next);
-    else { editor.setModel(null); $('#welcome').classList.remove('hidden'); }
+    else editor.setModel(null);
   }
-  doc.model.dispose();
+  if (!elsewhere) doc.model.dispose();
+  if (!tabOrder.length && focused === 1) closeSplit();
+  updateWelcome();
   scheduleRender();
   updatePos();
+  onActiveChanged();
 }
 
+const SPLIT_ICON = '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M8 3v10" stroke="currentColor" stroke-width="1.1"/></svg>';
 function renderTabs() {
-  tabsEl.innerHTML = tabOrder.map((id) => {
-    const d = docs.get(id);
-    const cls = ['tab'];
-    if (id === activeId) cls.push('active');
-    if (d.dirty) cls.push('dirty');
-    if (d.deleted) cls.push('deleted');
-    const n = tree.nodes.get(id);
-    const title = n ? pathOf(n).map((p) => p.name).join('.') : d.name;
-    return `<div class="${cls.join(' ')}" data-id="${esc(id)}" title="${esc(title)}">${classIcon(d.cls)}<span class="tname">${esc(d.name)}</span><span class="close">${X_ICON}</span></div>`;
-  }).join('');
-  const active = tabsEl.querySelector('.tab.active');
-  if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  syncFocused();
+  for (const g of groups) {
+    const el = g.el.querySelector('.tabs');
+    el.innerHTML = g.tabOrder.map((id) => {
+      const d = docs.get(id);
+      if (!d) return '';
+      const cls = ['tab'];
+      if (id === g.activeId) cls.push('active');
+      if (d.dirty) cls.push('dirty');
+      if (d.deleted) cls.push('deleted');
+      if (typeof errorCount === 'function' && errorCount(id)) cls.push('has-errors');
+      const n = tree.nodes.get(id);
+      const title = n ? pathOf(n).map((p) => p.name).join('.') : d.name;
+      return `<div class="${cls.join(' ')}" data-id="${esc(id)}" title="${esc(title)}">${classIcon(d.cls)}<span class="tname">${esc(d.name)}</span><span class="close">${X_ICON}</span></div>`;
+    }).join('') + `<div class="tabs-actions">${g.index === 0 ? `<button data-tabact="split" title="Split Editor (${MOD}+\\)">${SPLIT_ICON}</button>` : `<button data-tabact="unsplit" title="Close Split">${X_ICON}</button>`}</div>`;
+    g.el.classList.toggle('empty', !g.tabOrder.length);
+    const active = el.querySelector('.tab.active');
+    if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
 }
-tabsEl.addEventListener('mousedown', (e) => {
+const groupsEl = $('#groups');
+const groupOf = (el) => Number(el.closest('.group').dataset.group);
+groupsEl.addEventListener('mousedown', (e) => {
+  const act = e.target.closest('[data-tabact]');
+  if (act) { e.preventDefault(); if (act.dataset.tabact === 'split') splitEditor(); else closeSplit(); return; }
   const tab = e.target.closest('.tab');
   if (!tab) return;
-  if (e.button === 1) { e.preventDefault(); closeDoc(tab.dataset.id); return; }
+  const gi = groupOf(tab);
+  if (e.button === 1) { e.preventDefault(); closeDoc(tab.dataset.id, gi); return; }
   if (e.button !== 0) return;
-  if (e.target.closest('.close')) { closeDoc(tab.dataset.id); return; }
+  if (e.target.closest('.close')) { closeDoc(tab.dataset.id, gi); return; }
+  focusGroup(gi);
   activate(tab.dataset.id);
 });
-tabsEl.addEventListener('contextmenu', (e) => {
+groupsEl.addEventListener('contextmenu', (e) => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
   e.preventDefault();
   const id = tab.dataset.id;
+  const gi = groupOf(tab);
+  focusGroup(gi);
   showMenu([
-    { label: 'Close', key: `${MOD}+W`, run: () => closeDoc(id) },
-    { label: 'Close Others', run: () => tabOrder.filter((t) => t !== id).forEach(closeDoc) },
-    { label: 'Close All', run: () => [...tabOrder].forEach(closeDoc) },
+    { label: 'Close', key: `${MOD}+W`, run: () => closeDoc(id, gi) },
+    { label: 'Close Others', run: () => tabOrder.filter((x) => x !== id).forEach((x) => closeDoc(x, gi)) },
+    { label: 'Close All', run: () => [...tabOrder].forEach((x) => closeDoc(x, gi)) },
+    '-',
+    { label: gi === 0 ? 'Open to the Side' : 'Move to the Left', key: gi === 0 ? `${MOD}+\\` : '', run: () => { if (gi === 0) splitEditor(id); else { focusGroup(0); activate(id); } } },
+    { label: 'Show History', run: () => typeof showHistoryFor === 'function' && showHistoryFor(id) },
     '-',
     { label: 'Reveal in Explorer', run: () => { showView('explorer'); select(id, true); } },
     { label: 'Select in Studio', run: () => bridge.send({ type: 'select', id }) },
+    { label: 'Copy Lua Path', run: () => { const n = tree.nodes.get(id); if (n) { bridge.copy(luaPath(n)); toast('Copied path: ' + luaPath(n)); } } },
   ], e.clientX, e.clientY);
 });
 
 function updateBreadcrumbs() {
-  const el = $('#breadcrumbs');
-  const n = activeId && tree.nodes.get(activeId);
-  if (!activeId) { el.innerHTML = ''; return; }
-  const parts = n ? pathOf(n) : [{ id: activeId, name: docs.get(activeId).name, cls: docs.get(activeId).cls }];
-  el.innerHTML = parts.map((p, i) => (i ? '<span class="sep">›</span>' : '') + `<span class="crumb" data-id="${esc(p.id)}">${esc(p.name)}</span>`).join('');
+  syncFocused();
+  for (const g of groups) {
+    const el = g.el.querySelector('.breadcrumbs');
+    const id = g.activeId;
+    const n = id && tree.nodes.get(id);
+    if (!id || !docs.has(id)) { el.innerHTML = ''; continue; }
+    const parts = n ? pathOf(n) : [{ id, name: docs.get(id).name, cls: docs.get(id).cls }];
+    el.innerHTML = parts.map((p, i) => (i ? '<span class="sep">›</span>' : '') + `<span class="crumb" data-id="${esc(p.id)}">${esc(p.name)}</span>`).join('');
+  }
 }
-$('#breadcrumbs').addEventListener('click', (e) => {
+groupsEl.addEventListener('click', (e) => {
   const c = e.target.closest('.crumb');
   if (c) { showView('explorer'); select(c.dataset.id, true); treeEl.focus(); }
 });
@@ -755,6 +869,25 @@ function renderStatus() {
     : '<span class="pill warn"><span class="dot"></span>Waiting for Roblox Studio</span>';
   $('#sb-update').textContent = !status.updateReady ? ''
     : IS_MAC ? `⟳ Bloxcode ${status.updateReady} is out · Download` : `⟳ Update ${status.updateReady} ready · Restart`;
+  // snapshot progress
+  const snap = status.snapshot;
+  const loading = status.connected && snap && snap.total && snap.done < snap.total;
+  $('#tree-progress').classList.toggle('hidden', !loading);
+  if (loading) $('#tree-progress div').style.width = Math.round((snap.done / snap.total) * 100) + '%';
+  // play test controls
+  const pt = status.playtest || {};
+  const play = $('#tb-play');
+  play.classList.toggle('running', !!pt.running);
+  play.classList.toggle('disabled', !status.connected || (status.pluginVersion || 0) < 3);
+  play.title = (status.pluginVersion || 0) < 3 && status.connected ? 'Restart Roblox Studio to use play tests from Bloxcode' : '';
+  const sbPlay = $('#sb-playtest');
+  sbPlay.textContent = pt.running ? '● Play test running · Stop' : '';
+  sbPlay.classList.toggle('playtest-on', !!pt.running);
+  // language server
+  const lspState = (status.lsp || {}).state;
+  const lspLabel = { downloading: '⟳ Luau: downloading…', starting: '⟳ Luau: starting…', ready: '✓ Luau', error: '⚠ Luau' }[lspState] || '';
+  $('#sb-lsp').textContent = lspLabel;
+  $('#sb-lsp').title = (status.lsp && status.lsp.detail) || 'Luau language server';
   renderPluginPanel();
   renderClaudePanel();
   renderEmptyState();
@@ -793,18 +926,20 @@ $('#plugin-panel').addEventListener('click', async (e) => {
 // =====================================================================
 // Claude
 // =====================================================================
-const STARTER_PROMPT = `You are my Roblox developer. You are connected to my open Roblox Studio place through Bloxcode (the "bloxcode" MCP tools).
+const STARTER_PROMPT = `You are my Roblox game developer. You work directly in my open Roblox Studio place through Bloxcode (the "bloxcode" tools).
 
-How to work:
-1. Call get_status. If Studio is not connected, tell me what to do.
-2. Call get_explorer to learn how my game is organized, and read the scripts that matter before you change anything.
-3. Make changes directly with the Bloxcode tools (create_instance, write_script, edit_script, set_properties, install_package). Don't paste code into the chat for me to copy.
-4. Server code goes in ServerScriptService, client code in StarterPlayerScripts or StarterGui, shared modules and RemoteEvents in ReplicatedStorage. Never trust the client.
-5. Write clean, modern Luau (task library, GetService, types where useful) and follow the style already in my game.
-6. When something needs testing, tell me to press Play, then read the errors with get_output and fix them.
-7. Ask before deleting or rewriting big parts of the game. At the end, give me a short summary of what you changed.
+Before you start: call get_status, then get_explorer (scripts_only) and read the scripts that matter for the task.
 
-My first task: `;
+While you work:
+- Make every change with the Bloxcode tools. Don't paste code for me to copy.
+- Follow how my game is already organized and its code style. Server code goes in ServerScriptService, client code in StarterPlayerScripts or StarterGui, shared modules and RemoteEvents in ReplicatedStorage. Validate everything the client sends.
+- Modern Luau only (task.wait, GetService, types where useful).
+- Check your work: get_diagnostics for type errors, then a short play test (start_playtest with seconds) and get_output for runtime errors. Fix what you find.
+- Ask me before deleting things or rewriting large parts of the game.
+
+When you are done: a short summary of what changed (paths) and what I should test. Answer in my language.
+
+My task: `;
 
 const agentLog = [];
 let agentTimer = null;
@@ -1064,6 +1199,21 @@ function toast(text, kind) {
 }
 
 $('#sb-update').addEventListener('click', () => bridge.restartToUpdate());
+$('#sb-playtest').addEventListener('click', () => stopPlaytest());
+$('#sb-lsp').addEventListener('click', () => { if ((status.lsp || {}).state === 'error') { bridge.invoke('lsp:restart'); toast('Restarting the Luau language server…'); } else openSettings('editor'); });
+
+async function startPlaytest(mode) {
+  if (!requireConnection()) return;
+  if ((status.pluginVersion || 0) < 3) { toast('Restart Roblox Studio once so the Bloxcode 2.0 plugin loads, then play tests work from here.', 'warn'); return; }
+  try {
+    toast(mode === 'run' ? 'Starting the server (Run)…' : 'Starting a play test…');
+    await bridge.invoke('playtest:start', mode, true);
+  } catch (err) { toast(cleanErr(err), 'error'); }
+}
+async function stopPlaytest() {
+  try { await bridge.invoke('playtest:stop'); } catch (err) { toast(cleanErr(err), 'error'); }
+}
+function cleanErr(err) { return String(err && err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''); }
 
 $('#sb-autosync').addEventListener('click', () => {
   autoSync = !autoSync;
@@ -1076,19 +1226,29 @@ $('#sb-autosync').addEventListener('click', () => {
 // Views, sash, global shortcuts, toolbar actions
 // =====================================================================
 function showView(name) {
-  if (name === 'search') { quickOpen(); return; }
-  document.querySelectorAll('.ab-item').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.ab-item[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
+  saveSetting('lastView', name);
   if (name === 'explorer') { treeChanged(); }
   if (name === 'packages') { renderPackages(); loadPopular(); setTimeout(() => $('#pkg-search').focus(), 0); }
+  if (name === 'search' && typeof searchFocus === 'function') searchFocus();
+  if (name === 'properties' && typeof propsShow === 'function') propsShow();
+  if (name === 'github' && typeof githubShow === 'function') githubShow();
 }
-document.querySelectorAll('.ab-item').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
+document.querySelectorAll('.ab-item[data-view]').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
 
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-action]');
   if (!a) return;
   const act = a.dataset.action;
   if (act === 'quickopen') quickOpen();
+  else if (act === 'palette') openPalette();
+  else if (act === 'settings') openSettings();
+  else if (act === 'play') startPlaytest('play');
+  else if (act === 'run') startPlaytest('run');
+  else if (act === 'stop') stopPlaytest();
+  else if (act === 'whatsnew') showWhatsNew();
+  else if (act === 'wizard') showWizard();
   else if (act === 'newscript') newScriptFlow();
   else if (act === 'refresh') { if (requireConnection()) bridge.send({ type: 'snapshot' }); }
   else if (act === 'collapse') { expanded.clear(); treeChanged(); }
@@ -1117,7 +1277,20 @@ document.addEventListener('click', (e) => {
 
 addEventListener('keydown', (e) => {
   const ctrl = e.ctrlKey || e.metaKey;
-  if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); quickOpen(); }
+  const key = e.key.toLowerCase();
+  if (!$('#modal').classList.contains('hidden') && e.key === 'Escape') { e.preventDefault(); if (modalCurrent && modalCurrent.dismissable !== false) closeModal(); return; }
+  if (ctrl && e.shiftKey && key === 'p') { e.preventDefault(); openPalette(); }
+  else if (ctrl && e.shiftKey && key === 'f') { e.preventDefault(); showView('search'); }
+  else if (ctrl && e.shiftKey && key === 'h') { e.preventDefault(); showView('search'); if (typeof searchShowReplace === 'function') searchShowReplace(true); }
+  else if (ctrl && !e.shiftKey && e.key === ',') { e.preventDefault(); openSettings(); }
+  else if (ctrl && !e.shiftKey && (key === 'j' || e.key === '`')) { e.preventDefault(); togglePanel(); }
+  else if (ctrl && !e.shiftKey && e.key === '\\') { e.preventDefault(); splitEditor(); }
+  else if (ctrl && e.shiftKey && key === 'm') { e.preventDefault(); showPanel('problems'); }
+  else if (ctrl && e.shiftKey && key === 'u') { e.preventDefault(); showPanel('output'); }
+  else if (e.key === 'F5' && e.shiftKey) { e.preventDefault(); stopPlaytest(); }
+  else if (e.key === 'F5') { e.preventDefault(); startPlaytest('play'); }
+  else if (e.key === 'F8') { e.preventDefault(); startPlaytest('run'); }
+  else if (ctrl && !e.shiftKey && key === 'p') { e.preventDefault(); quickOpen(); }
   else if (ctrl && e.key.toLowerCase() === 'w') { e.preventDefault(); if (activeId) closeDoc(activeId); }
   else if (ctrl && e.key === 'Tab') {
     e.preventDefault();
@@ -1126,8 +1299,8 @@ addEventListener('keydown', (e) => {
       activate(tabOrder[(i + (e.shiftKey ? -1 : 1) + tabOrder.length) % tabOrder.length]);
     }
   } else if (ctrl && e.shiftKey && e.key.toLowerCase() === 'e') { e.preventDefault(); showView('explorer'); treeEl.focus(); }
-  else if (ctrl && e.key.toLowerCase() === 's') { e.preventDefault(); if (activeId) syncDoc(docs.get(activeId)); }
-  else if (e.key === 'Escape') hideMenu();
+  else if (ctrl && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (activeId) syncDoc(docs.get(activeId)); }
+  else if (e.key === 'Escape') { hideMenu(); if (!$('#settings-page').classList.contains('hidden') && document.activeElement === document.body) closeSettings(); }
 }, true);
 
 // =====================================================================
@@ -1141,6 +1314,15 @@ function handleEvents(events) {
         resetTree(); changed = true; break;
       case 'add':
         upsertNode(e); changed = true; break;
+      case 'snap':
+        for (const r of e.nodes || []) upsertNode({ id: r[0], name: r[1], cls: r[2], parent: r[3] || null });
+        changed = true; break;
+      case 'log':
+        if (typeof outputAdd === 'function') outputAdd(e);
+        break;
+      case 'logsCleared':
+        if (typeof outputClear === 'function') outputClear(false);
+        break;
       case 'remove':
         removeNode(e.id); changed = true; break;
       case 'rename': {
@@ -1161,7 +1343,7 @@ function handleEvents(events) {
         const d = docs.get(e.id);
         if (d) {
           if (!d.dirty) applyRemoteSource(d, e.source);
-          else toast(`"${d.name}" was changed in Studio. Your version will overwrite it the next time you send.`, 'warn');
+          else if (e.source !== d.model.getValue()) showConflict(d, e.source);
         }
         break;
       }
@@ -1320,6 +1502,53 @@ bridge.onPackageProgress(({ spec, text }) => {
 });
 
 // =====================================================================
+// Editor factory
+// =====================================================================
+function createGroupEditor(g) {
+  const ed = monaco.editor.create(g.el.querySelector('.editor-host'), {
+    model: null,
+    theme: currentMonacoTheme(),
+    automaticLayout: true,
+    smoothScrolling: true,
+    cursorBlinking: 'smooth',
+    cursorSmoothCaretAnimation: 'on',
+    bracketPairColorization: { enabled: true },
+    guides: { bracketPairs: 'active', indentation: true },
+    renderWhitespace: 'selection',
+    insertSpaces: false,
+    padding: { top: 6 },
+    scrollBeyondLastLine: true,
+    mouseWheelZoom: true,
+    fixedOverflowWidgets: true,
+    ...editorOptions(),
+  });
+  ed.onDidChangeCursorPosition(() => { if (g.index === focused) updatePos(); });
+  ed.onDidChangeCursorSelection(() => { if (g.index === focused) updatePos(); });
+  ed.onDidFocusEditorText(() => focusGroup(g.index));
+  ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { if (activeId) syncDoc(docs.get(activeId)); });
+  ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, quickOpen);
+  ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP, openPalette);
+  ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Backslash, () => splitEditor());
+  ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ, togglePanel);
+  if (typeof setupEditorFeatures === 'function') setupEditorFeatures(ed, g);
+  return ed;
+}
+function allEditors() { syncFocused(); return groups.map((g) => g.editor).filter(Boolean); }
+
+// What Claude sees with get_editor_state.
+window.__editorState = () => {
+  syncFocused();
+  const d = activeId && docs.get(activeId);
+  const n = activeId && tree.nodes.get(activeId);
+  const tabs = [...new Set(groups.flatMap((g) => g.tabOrder))].map((id) => { const x = tree.nodes.get(id); return x ? pathOf(x).map((p) => p.name).join('.') : id; });
+  if (!d || !editor) return { active: null, tabs };
+  const p = editor.getPosition();
+  const sel = editor.getSelection();
+  const selection = sel && !sel.isEmpty() ? d.model.getValueInRange(sel).slice(0, 8000) : '';
+  return { active: { id: d.id, path: n ? pathOf(n).map((x) => x.name).join('.') : d.name, line: p ? p.lineNumber : 1, col: p ? p.column : 1, selection }, tabs };
+};
+
+// =====================================================================
 // Boot
 // =====================================================================
 require.config({ paths: { vs: '../../node_modules/monaco-editor/min/vs' } });
@@ -1345,33 +1574,10 @@ require(['vs/editor/editor.main'], () => {
     childrenOf: (n) => [...(n.children || [])].map((id) => tree.nodes.get(id)).filter(Boolean),
   }));
 
-  editor = monaco.editor.create($('#editor'), {
-    model: null,
-    theme: 'bloxcode-dark',
-    automaticLayout: true,
-    fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, "Courier New", monospace',
-    fontLigatures: true,
-    fontSize: 14,
-    lineHeight: 21,
-    minimap: { enabled: true, renderCharacters: false },
-    smoothScrolling: true,
-    cursorBlinking: 'smooth',
-    cursorSmoothCaretAnimation: 'on',
-    bracketPairColorization: { enabled: true },
-    guides: { bracketPairs: 'active', indentation: true },
-    renderWhitespace: 'selection',
-    stickyScroll: { enabled: true },
-    tabSize: 4,
-    insertSpaces: false,
-    padding: { top: 6 },
-    scrollBeyondLastLine: true,
-    mouseWheelZoom: true,
-    fixedOverflowWidgets: true,
-  });
-  editor.onDidChangeCursorPosition(updatePos);
-  editor.onDidChangeCursorSelection(updatePos);
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { if (activeId) syncDoc(docs.get(activeId)); });
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, quickOpen);
+  applyAppearance();
+  editor = createGroupEditor(groups[0]);
+  groups[0].editor = editor;
+  initFeatures();
 
   bridge.onEvents(handleEvents);
   bridge.onStatus((s) => {
@@ -1388,4 +1594,7 @@ require(['vs/editor/editor.main'], () => {
   bridge.getStatus().then((s) => { status = s; renderStatus(); });
   renderStatus();
   treeChanged();
+  const lastView = loadSetting('lastView', 'explorer');
+  if (lastView !== 'explorer' && document.getElementById('view-' + lastView)) showView(lastView);
+  if (typeof startOnboarding === 'function') startOnboarding();
 });

@@ -1,19 +1,20 @@
 {
   "name": "bloxcode",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "description": "External code editor for Roblox Studio",
   "main": "app/main.js",
   "author": "Veitheim",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "icon": "node tools/make-icon.js",
-    "dist": "electron-builder --win nsis",
+    "icon": "electron tools/make-icon.js",
+    "dist": "node tools/build.js",
     "dist:mac": "electron-builder --mac --universal",
     "docs:build": "cd studio-plugin && npx moonwave build --code src && cd .. && node tools/fix-docs-links.js",
     "docs:deploy": "cd studio-plugin && npx wrangler deploy",
     "release": "node tools/release.js",
-    "release:mac": "node tools/release.js --mac"
+    "release:mac": "node tools/release.js --mac",
+    "dist:unsigned": "electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",

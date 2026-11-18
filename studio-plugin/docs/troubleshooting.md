@@ -1,7 +1,19 @@
 ---
-sidebar_position: 6
+sidebar_position: 11
 title: Troubleshooting
 ---
+
+## "Windows protected your PC" when installing
+
+Bloxcode isn't code-signed yet, so SmartScreen warns about new downloads. Click **More info → Run anyway**. The warning only appears for the installer, not when Bloxcode updates itself. Bloxcode is open source, so you can check [the code on GitHub](https://github.com/Veitheim/bloxcode).
+
+## Play buttons are grey
+
+Play tests need the 2.0 plugin. Restart Roblox Studio once after updating Bloxcode.
+
+## "⚠ Luau" in the status bar
+
+The Luau language server stopped or couldn't be downloaded. Click it to restart. The first start needs the internet once to download luau-lsp.
 
 ## "Can't reach Bloxcode" in the plugin
 

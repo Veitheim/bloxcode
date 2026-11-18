@@ -1,0 +1,66 @@
+# Builds the Windows installer for every version tag (v2.0.0, …) and publishes a GitHub Release.
+# When SignPath is set up (free for open source, see SIGNING.md), the installer is signed first.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build installer
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Upload unsigned installer
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: dist/Bloxcode-Setup-*.exe
+
+      - name: Sign with SignPath
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: bloxcode
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Pick installer
+        id: pick
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem signed/Bloxcode-Setup-*.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $file) { $file = Get-ChildItem dist/Bloxcode-Setup-*.exe | Select-Object -First 1 }
+          "file=$($file.FullName)" >> $env:GITHUB_OUTPUT
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $notes = "release-notes/$version.md"
+          if (-not (Test-Path $notes)) { $notes = "" }
+          "notes=$notes" >> $env:GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Bloxcode ${{ github.ref_name }}
+          body_path: ${{ steps.pick.outputs.notes }}
+          files: ${{ steps.pick.outputs.file }}

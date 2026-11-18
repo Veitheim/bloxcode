@@ -14,9 +14,9 @@ From installing to your first script in Bloxcode in five minutes.
 
 [**Download the installer**](https://bloxcode-docs.seidl.workers.dev/download/windows), run it and follow the steps. Bloxcode starts automatically when it's done.
 
-:::caution Windows SmartScreen
-The installer is not code-signed. If Windows says "Unknown publisher", click
-**More info → Run anyway**.
+:::caution "Windows protected your PC"
+The installer is not code-signed yet, so Windows SmartScreen warns the first time. Click
+**More info → Run anyway**. Bloxcode is open source; you can check every line [on GitHub](https://github.com/Veitheim/bloxcode).
 :::
 
 :::tip Automatic updates
@@ -65,4 +65,12 @@ The status bar at the bottom of Bloxcode turns green and shows **Connected to St
 - **In Bloxcode**, click a script in the Explorer or search with <kbd>Ctrl</kbd> + <kbd>P</kbd> (<kbd>⌘</kbd> + <kbd>P</kbd> on Mac).
 - **New script:** right-click `ServerScriptService` → **New Script**.
 
-Everything you type goes to Studio automatically. Learn more in [Explorer & Sync](./explorer) and [Wally Packages](./packages).
+Everything you type goes to Studio automatically.
+
+## 4. Next steps
+
+- Pick a theme and font: [Editor, Themes & Settings](./editor)
+- See type errors while you type: [Luau Type Checking](./luau)
+- Start play tests and read the Output: [Play Tests & Output](./testing)
+- Let Claude build features with you: [Code with Claude](./claude)
+- Back up your scripts: [GitHub](./github)

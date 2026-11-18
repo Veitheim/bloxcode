@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 8
 title: Code with Claude
 slug: /claude
 ---
@@ -9,7 +9,7 @@ Chat with [Claude](https://claude.ai) right inside Bloxcode. You describe what y
 You watch every change live in Bloxcode. Each change is one undo step in Studio, so **Ctrl+Z** (**⌘+Z** on Mac) takes it back.
 
 :::info What you need
-- Bloxcode **1.3.0** or newer
+- Bloxcode **2.0** or newer
 - Roblox Studio with the Bloxcode plugin and **Code Mode** on
 - A Claude plan (Pro or Max) **or** an Anthropic API key
 :::
@@ -39,10 +39,6 @@ The key is stored encrypted on your computer. Usage is billed by Anthropic per r
 The first time you save a key (and after an update), macOS asks whether Bloxcode may use its keychain. Enter your Mac password and click **Always Allow**.
 :::
 
-:::note On Mac
-The first time you save a key (and after an update), macOS asks whether Bloxcode may use its keychain. Enter your Mac password and click **Always Allow**.
-:::
-
 You can switch between the two any time with the **gear icon** at the top of the Claude panel.
 
 ## 2. Chat
@@ -56,36 +52,43 @@ Keep Roblox Studio (with Code Mode on) and Bloxcode open, type what you want and
 
 The chat shows each step Claude takes (✓ done, ✕ failed). **Stop** ends the current answer, and **+** starts a new chat.
 
-## 3. Test together
+Select code in the editor, right-click → **Ask Claude About This Code** to start a message with that code.
 
-Claude can't press Play. When it asks you to test:
+## 3. Review changes (optional)
 
-1. Press **Play** in Studio and try the feature.
-2. Stop the test and tell Claude *"tested"* (or what went wrong).
-3. Claude reads the errors and warnings from the play test with `get_output` and fixes them.
+Turn on **Review changes** under the chat box (or **Settings → Claude**). Then every script change from Claude first appears as a side-by-side diff. **Accept** applies it in Studio, **Reject** tells Claude no, optionally with a note like *"use a ModuleScript instead"*.
+
+![Reviewing a change from Claude](/img/review.png)
+
+## 4. Testing
+
+Claude tests its own work: it checks type errors with `get_diagnostics`, starts a short play test with `start_playtest`, reads the Output and fixes errors, and can look inside the running game with `run_code`. You can always press **Play** yourself and tell Claude what happened.
+
+:::info After updating from 1.x
+Play tests and `run_code` need the 2.0 plugin. Restart Roblox Studio once after updating.
+:::
 
 ## What Claude can do
 
-| Tool | What it does |
+| Area | Tools |
 | --- | --- |
-| `get_status` | Checks that Studio is connected |
-| `get_explorer` | Shows the Explorer tree with class names |
-| `read_script` | Reads a script with line numbers |
-| `write_script` | Replaces a whole script |
-| `edit_script` | Changes one exact piece of a script |
-| `create_instance` | Creates Scripts, ModuleScripts, RemoteEvents, Folders, Parts, GUIs, … (scripts with code right away) |
-| `rename_instance` · `move_instance` · `delete_instance` | Renames, moves or deletes objects |
-| `get_properties` · `set_properties` | Reads and changes properties, attributes and tags (Size, Color, Text, …) |
-| `search_scripts` | Searches all scripts for some text |
-| `get_output` | Reads the Studio Output, including play tests |
-| `get_selection` | Sees what you selected in Studio ("fix *this* script") |
-| `open_in_editor` | Opens a script in Bloxcode for you |
-| `search_packages` · `install_package` | Finds and installs Wally packages |
+| Overview | `get_status`, `get_explorer`, `get_selection` (Studio selection), `get_editor_state` (open script and selected text) |
+| Scripts | `read_script`, `read_scripts` (up to 20 at once), `write_script`, `edit_script` (several exact edits at once), `search_scripts` (text or regex), `replace_in_scripts`, `open_in_editor` |
+| Checking | `get_diagnostics` (Luau type errors), `get_output` (Studio and play-test output) |
+| Instances | `create_instance`, `create_tree` (a whole GUI or model in one step), `duplicate_instance`, `rename_instance`, `move_instance`, `delete_instance`, `get_properties`, `set_properties` (also attributes and tags, several objects at once), `set_selection`, `insert_asset` |
+| Running | `start_playtest` (Play or Run, optionally for a few seconds with the Output), `stop_playtest`, `get_playtest_state`, `run_code` (Luau in Studio or inside a running test) |
+| Undo | `undo`, `redo`, `get_script_history`, `restore_script_version` |
+| Packages & GitHub | `search_packages`, `install_package`, `publish_to_github` |
 
-The Bloxcode status bar shows what Claude is doing right now, and the Claude panel lists its recent actions.
+The Bloxcode status bar shows what Claude is doing right now.
+
+### For Claude Desktop and Claude Code
+
+Besides tools, Bloxcode offers **resources** (the Explorer, the Output, the problems, the open script and every script as `bloxcode://script/<path>`) and ready-made **prompts**: *build a feature*, *fix errors*, *review code*, *explain this game* and *secure remotes*. In Claude Desktop they are in the **+** menu of the chat box.
 
 ## Safety
 
+- With **Review changes** on, nothing changes in Studio until you click Accept.
 - In the chat, Claude can only use Bloxcode's tools. It can't run programs or read other files on your computer.
 - Only programs on your own PC can use the connection. Bloxcode listens on `localhost`, and every request needs a secret key that only Bloxcode and the Claude setup it creates know. Websites can't use it.
 - Claude only works while Bloxcode is open and Code Mode is on in Studio.

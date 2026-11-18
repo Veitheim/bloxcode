@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+  <title>Bloxcode · Play test</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      font: 12.5px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #c8cfe3; user-select: none;
+      background: radial-gradient(420px 160px at 0% 0%, #7c6cff2e, transparent 70%), #11131f;
+      border: 1px solid #2a2f47; border-radius: 0; display: flex; flex-direction: column;
+    }
+    header { -webkit-app-region: drag; display: flex; align-items: center; gap: 8px; padding: 9px 10px 7px 12px; }
+    header img { width: 18px; height: 18px; }
+    .title { font-weight: 650; color: #f2f4fb; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .live { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #f85149; margin-right: 6px; animation: pulse 1.2s ease-in-out infinite; }
+    .ended .live { background: #8b93ad; animation: none; }
+    @keyframes pulse { 50% { opacity: .3; } }
+    .time { font-variant-numeric: tabular-nums; color: #8b93ad; }
+    header button { -webkit-app-region: no-drag; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: #8b93ad; cursor: pointer; display: grid; place-items: center; }
+    header button:hover { background: #ffffff14; color: #f2f4fb; }
+    .counts { display: flex; gap: 6px; padding: 0 12px 8px; }
+    .chip { border-radius: 999px; padding: 1px 9px; font-weight: 600; font-size: 11.5px; background: #ffffff0f; color: #8b93ad; }
+    .chip.err { background: #f8514926; color: #ff7b72; }
+    .chip.warn { background: #d2992226; color: #e3b341; }
+    #log { flex: 1; min-height: 0; overflow: auto; margin: 0 8px; border-radius: 8px; background: #0b0d17; border: 1px solid #1d2133; padding: 5px 8px; font: 11.5px/1.55 "Cascadia Code", Consolas, monospace; user-select: text; }
+    #log div { white-space: pre-wrap; word-break: break-word; }
+    #log .MessageError { color: #ff7b72; }
+    #log .MessageWarning { color: #e3b341; }
+    #log .MessageInfo { color: #7dcfff; }
+    #log .ctx { color: #5b627c; }
+    #log .empty { color: #5b627c; font-family: "Segoe UI", sans-serif; }
+    footer { display: flex; gap: 6px; padding: 8px; }
+    footer button { flex: 1; border: 0; border-radius: 8px; padding: 7px 10px; font: 600 12.5px "Segoe UI", sans-serif; cursor: pointer; color: #f2f4fb; background: #222740; }
+    footer button:hover { background: #2b3150; }
+    footer .stop { background: #da3633; }
+    footer .stop:hover { background: #e5534b; }
+    .ended footer .stop { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="../icon.png" alt="">
+    <span class="title"><span class="live"></span><span id="title">Play test running</span></span>
+    <span class="time" id="time">0:00</span>
+    <button id="close" title="Hide this window">✕</button>
+  </header>
+  <div class="counts"><span class="chip err" id="errors">0 errors</span><span class="chip warn" id="warnings">0 warnings</span><span class="chip" id="prints">0 prints</span></div>
+  <div id="log"><div class="empty">Output from the test shows up here.</div></div>
+  <footer>
+    <button class="stop" id="stop">■ Stop test</button>
+    <button id="back">Back to Bloxcode</button>
+  </footer>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const counts = { MessageError: 0, MessageWarning: 0, MessageOutput: 0 };
+    let since = Date.now();
+    let running = true;
+    function renderCounts() {
+      $('errors').textContent = `${counts.MessageError} error${counts.MessageError === 1 ? '' : 's'}`;
+      $('warnings').textContent = `${counts.MessageWarning} warning${counts.MessageWarning === 1 ? '' : 's'}`;
+      $('prints').textContent = `${counts.MessageOutput} print${counts.MessageOutput === 1 ? '' : 's'}`;
+    }
+    setInterval(() => {
+      if (!running) return;
+      const s = Math.floor((Date.now() - since) / 1000);
+      $('time').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }, 500);
+    bridge.on('hud:state', (st) => {
+      if (st.since) since = st.since;
+      running = !!st.running;
+      document.body.classList.toggle('ended', !running);
+      $('title').textContent = running ? (st.mode === 'run' ? 'Server running (Run)' : 'Play test running') : 'Play test ended';
+      if (st.reset) { for (const k in counts) counts[k] = 0; $('log').innerHTML = '<div class="empty">Output from the test shows up here.</div>'; renderCounts(); }
+    });
+    bridge.on('hud:log', (l) => {
+      if (l.kind in counts) counts[l.kind]++;
+      renderCounts();
+      const log = $('log');
+      const empty = log.querySelector('.empty');
+      if (empty) empty.remove();
+      const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 30;
+      log.insertAdjacentHTML('beforeend', `<div class="${esc(l.kind)}"><span class="ctx">${esc(l.context)} </span>${esc(l.message)}</div>`);
+      while (log.childElementCount > 300) log.firstElementChild.remove();
+      if (atBottom) log.scrollTop = log.scrollHeight;
+    });
+    $('stop').onclick = () => { $('stop').textContent = 'Stopping…'; bridge.post('hud:stop'); };
+    $('back').onclick = () => bridge.post('hud:back');
+    $('close').onclick = () => bridge.post('hud:close');
+  </script>
+</body>
+</html>
