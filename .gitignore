@@ -9,3 +9,4 @@ studio-plugin/.wrangler/
 signing.json
 *.pfx
 *.p12
+promo/
