@@ -3,6 +3,10 @@ sidebar_position: 12
 title: Changelog
 ---
 
+## 2.0.2 · November 19, 2026
+
+- **Discord Rich Presence** is switched on. Turn it on under **Settings → Discord**. [More](./editor#discord-rich-presence)
+
 ## 2.0.1 · November 18, 2026
 
 - Fixed: **Install & sign in** in the Claude panel showed the Windows error *"sign-in\\" could not be found* instead of opening the sign-in window.
@@ -26,7 +30,7 @@ The biggest update yet: themes, real Luau type checking, search across all scrip
 - **Properties panel** for properties, attributes and tags.
 - **Split editor.**
 - **GitHub:** create a repository and publish with one click. [More](./github)
-- **Discord Rich Presence** (switched on with a small update right after 2.0).
+- **Discord Rich Presence** (switched on in 2.0.2).
 - **Setup assistant** and **What's new** after updates.
 
 ### Claude

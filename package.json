@@ -1,6 +1,6 @@
 {
   "name": "bloxcode",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "External code editor for Roblox Studio",
   "main": "app/main.js",
   "author": "Veitheim",

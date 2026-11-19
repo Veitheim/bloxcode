@@ -3,6 +3,12 @@
 
 const CHANGELOG = [
   {
+    version: '2.0.2',
+    date: '2026-11-19',
+    title: 'Discord Rich Presence',
+    sections: [['New', ['<b>Discord Rich Presence</b> is switched on: turn it on under Settings → Discord to show "Editing Main.server.luau in My Obby" on your profile, with a Claude badge while Claude is working.']]],
+  },
+  {
     version: '2.0.1',
     date: '2026-11-18',
     title: 'Claude sign-in fix',
@@ -28,7 +34,7 @@ const CHANGELOG = [
         '<b>Properties panel:</b> edit properties, attributes and tags of the selected object.',
         '<b>Split editor</b> (Ctrl+\\) to see two scripts side by side.',
         '<b>GitHub:</b> sign in, create a repository and publish your scripts with one click. The layout works with Rojo too.',
-        '<b>Discord Rich Presence</b> (optional) is switched on with a small update right after 2.0.',
+        '<b>Discord Rich Presence</b> (optional, switched on in 2.0.2).',
         '<b>Setup assistant</b> on first start, and this window after every update.',
       ]],
       ['Claude', [

@@ -55,10 +55,6 @@ In **Go to File** (<kbd>Ctrl</kbd> + <kbd>P</kbd>), typing `>` switches to the c
 
 ## Discord Rich Presence
 
-:::note Coming in a small update
-Discord Rich Presence is built in and gets switched on with an update right after 2.0.
-:::
-
 **Settings → Discord** shows *"Editing Main.server.luau in My Obby"* on your Discord profile while you work. It only works while the Discord app runs on the same computer, and you choose whether the script name and the place name are shown. Nothing is sent over the internet by Bloxcode; it talks to the Discord app directly.
 
 ## Setup assistant and What's new
