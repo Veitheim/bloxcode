@@ -43,6 +43,14 @@ You can also switch themes from the command palette: <kbd>Ctrl</kbd> + <kbd>Shif
 
 Settings are saved on your computer. **About → Reset settings** brings back the defaults.
 
+## Color previews
+
+Next to `Color3.fromRGB(…)`, `Color3.new(…)`, `Color3.fromHex(…)` and `Color3.fromHSV(…)` you see a small swatch with the color. Click it to pick a new color; Bloxcode keeps the format you used.
+
+## Ctrl+click on instances
+
+Hold <kbd>Ctrl</kbd> and point at a path like `workspace.Map.Door`, `game:GetService("ReplicatedStorage").Remotes.Buy` or `script.Parent`: it is underlined and shows what it is. A click selects the object in the Explorer and in Studio, or opens it when it is a script. It also follows local variables, like `local Remotes = ReplicatedStorage:WaitForChild("Remotes")`.
+
 ## Command palette
 
 <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> lists every action: open views, start a play test, switch the theme, publish to GitHub, restart the language server and more. Type a few letters and press <kbd>Enter</kbd>. Your last commands are at the top.

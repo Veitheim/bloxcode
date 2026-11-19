@@ -10,7 +10,7 @@ const { isMac, appDataDir } = require('./platform');
 
 const MAX_LOG_LINES = 2000;
 
-function createAgent({ studio, search, history, lsp, github, playtest, packages, userData, onActivity, review, editorState }) {
+function createAgent({ studio, search, history, lsp, github, playtest, packages, userData, onActivity, review, editorState, remoteMap, templates }) {
   const { resolve, pathOf, requireScript, requireStudio, ask } = studio;
   const agentAsk = (cmd, opts = {}) => ask(cmd, { ...opts, agent: true });
 
@@ -413,6 +413,37 @@ function createAgent({ studio, search, history, lsp, github, playtest, packages,
       const deps = summary.dependencies ? `\nAlso installed ${summary.dependencies} dependenc${summary.dependencies === 1 ? 'y' : 'ies'} in ${folder}._Index.` : '';
       const warn = summary.warnings && summary.warnings.length ? `\nWarnings: ${summary.warnings.join('; ')}` : '';
       return { text: `Installed ${summary.name}@${summary.version} as ${service}.${folder}.${summary.alias}\nUse it with: local ${summary.alias} = require(game:GetService("${service}").${folder}.${summary.alias})${deps}${warn}` };
+    },
+
+    async get_remote_map() {
+      activity('Mapping remotes');
+      const list = await remoteMap.scan();
+      return { text: remoteMap.summary(list) };
+    },
+
+    async get_tags_and_attributes(a) {
+      const r = await agentAsk({ type: 'scanTags', limit: Math.min(Number(a.limit) || 50, 500) }, { timeout: 60000, minVersion: 4 });
+      const tags = Object.entries(r.tags || {});
+      const attrs = Object.entries(r.attributes || {});
+      const val = (v) => (v && typeof v === 'object' ? `${v.type}(${JSON.stringify(v.value)})` : JSON.stringify(v));
+      const out = [];
+      out.push(tags.length ? 'Tags (CollectionService):' : 'No tags in this place.');
+      for (const [tag, list] of tags) out.push(`  ${tag} (${list.length}): ${list.slice(0, 12).map((x) => x.path).join(', ')}${list.length > 12 ? ', …' : ''}`);
+      out.push(attrs.length ? '\nAttributes:' : '\nNo attributes in this place.');
+      for (const [name, list] of attrs) out.push(`  ${name} (${list.length}): ${list.slice(0, 8).map((x) => `${x.path} = ${val(x.value)}`).join(', ')}${list.length > 8 ? ', …' : ''}`);
+      return { text: out.join('\n') };
+    },
+
+    async list_templates() {
+      return { text: templates.list().map((t) => `${t.id}: ${t.name} (${t.category}). ${t.description}
+  creates: ${t.creates.join(', ')}${t.packages.length ? `
+  installs: ${t.packages.join(', ')}` : ''}`).join('\n\n') };
+    },
+
+    async insert_template(a) {
+      activity(`Inserting template ${a.id}`);
+      const r = await templates.insert(String(a.id || ''), { agent: true });
+      return { text: `Inserted "${r.template}": ${r.created.map((c) => c.path).join(', ')}. Read the scripts before changing them.` };
     },
 
     async publish_to_github(a) {

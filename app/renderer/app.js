@@ -1234,6 +1234,8 @@ function showView(name) {
   if (name === 'search' && typeof searchFocus === 'function') searchFocus();
   if (name === 'properties' && typeof propsShow === 'function') propsShow();
   if (name === 'github' && typeof githubShow === 'function') githubShow();
+  if (name === 'remotes' && typeof remotesShow === 'function') remotesShow();
+  if (name === 'tags' && typeof tagsShow === 'function') tagsShow();
 }
 document.querySelectorAll('.ab-item[data-view]').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
 
@@ -1249,6 +1251,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'stop') stopPlaytest();
   else if (act === 'whatsnew') showWhatsNew();
   else if (act === 'wizard') showWizard();
+  else if (act === 'templates') showTemplates();
   else if (act === 'newscript') newScriptFlow();
   else if (act === 'refresh') { if (requireConnection()) bridge.send({ type: 'snapshot' }); }
   else if (act === 'collapse') { expanded.clear(); treeChanged(); }

@@ -17,6 +17,8 @@ function add(name, cls, parent, source) {
 }
 const ws = add('Workspace', 'Workspace');
 const base = add('Baseplate', 'Part', ws);
+props.set(add('Lava', 'Part', ws) + ':tags', ['Damage']);
+props.set(base + ':attr', { Spawn: true });
 props.set(base, { Anchored: true, Size: { type: 'Vector3', value: [512, 20, 512] }, Color: { type: 'Color3', value: [91, 93, 105] }, Material: { type: 'Enum', value: 'Enum.Material.Plastic' }, Transparency: 0 });
 add('SpawnLocation', 'SpawnLocation', ws);
 const map = add('Map', 'Model', ws);
@@ -201,6 +203,8 @@ async function run(cmd) {
       const build = (spec, parent) => {
         const id = add(spec.name || spec.class, spec.class, parent, spec.source);
         if (spec.properties) props.set(id, spec.properties);
+        if (spec.tags) props.set(id + ':tags', spec.tags);
+        if (spec.attributes) props.set(id + ':attr', spec.attributes);
         out.push(ev(nodes.get(id)));
         count++;
         (spec.children || []).forEach((c) => build(c, id));
@@ -209,6 +213,14 @@ async function run(cmd) {
       const rootId = build(cmd.tree, cmd.parentId);
       await send(out);
       return { id: rootId, path: pathOf(rootId), count };
+    }
+    case 'scanTags': {
+      const tags = {}, attributes = {};
+      for (const x of nodes.values()) {
+        for (const tag of props.get(x.id + ':tags') || []) (tags[tag] = tags[tag] || []).push({ id: x.id, path: pathOf(x.id), className: x.cls });
+        for (const [k, v] of Object.entries(props.get(x.id + ':attr') || {})) (attributes[k] = attributes[k] || []).push({ id: x.id, path: pathOf(x.id), className: x.cls, value: v });
+      }
+      return { tags, attributes };
     }
     case 'insertAsset': {
       const id = add('Asset' + cmd.assetId, 'Model', cmd.parentId || ws);
@@ -256,7 +268,7 @@ async function run(cmd) {
 }
 
 (async () => {
-  await req('POST', '/hello', { clientId: client, placeName: 'My Obby', placeId: 0, pluginVersion: 3 });
+  await req('POST', '/hello', { clientId: client, placeName: 'My Obby', placeId: 0, pluginVersion: 4 });
   await snapshot();
   console.log('connected');
   setTimeout(() => log('Bloxcode mock Studio ready'), 500);

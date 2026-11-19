@@ -64,7 +64,7 @@
 --[=[
 	@interface Command
 	@within Protocol
-	.type "snapshot" | "open" | "closed" | "setSource" | "create" | "rename" | "move" | "duplicate" | "delete" | "select" | "wallyInstall" | "read" | "search" | "selection" | "getProperties" | "setProperties" | "readMany" | "setSources" | "undo" | "redo" | "runCode" | "startPlaytest" | "insertAsset" | "createTree" | "setSelection"
+	.type "snapshot" | "open" | "closed" | "setSource" | "create" | "rename" | "move" | "duplicate" | "delete" | "select" | "wallyInstall" | "read" | "search" | "selection" | "getProperties" | "setProperties" | "readMany" | "setSources" | "undo" | "redo" | "runCode" | "startPlaytest" | "insertAsset" | "createTree" | "setSelection" | "scanTags"
 	.reqId string? -- when set, the plugin answers with a reply event
 	.id string? -- target instance
 	.parentId string? -- for create and move

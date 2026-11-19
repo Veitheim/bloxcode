@@ -14,7 +14,7 @@ const os = require('os');
 
 const PORT = Number(process.env.BLOXCODE_PORT) || 34872;
 const KEY_FILE = process.env.BLOXCODE_KEY_FILE || path.join(process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Bloxcode', 'agent-key.txt');
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 
 const INSTRUCTIONS = `You are a senior Roblox developer working inside the user's open Roblox Studio place through Bloxcode, an external code editor that is live-synced with Studio.
 
@@ -146,6 +146,12 @@ const TOOLS = [
     } },
     annotations: RO,
   },
+
+  // ---------- game overview ----------
+  { name: 'get_remote_map', title: 'Remote map', description: 'Every RemoteEvent, RemoteFunction and BindableEvent with the scripts that fire and listen to it, plus warnings: server handlers that use client data without checks, remotes nobody listens to, calls on the wrong side. Use it before changing networking code and for security reviews.', inputSchema: { type: 'object', properties: {} }, annotations: RO },
+  { name: 'get_tags_and_attributes', title: 'Tags & attributes', description: 'All CollectionService tags and attribute names in the place with the instances that use them.', inputSchema: { type: 'object', properties: { limit: { type: 'number', description: 'Max instances per tag/attribute (default 50).' } } }, annotations: RO },
+  { name: 'list_templates', title: 'Templates', description: 'Ready-made, tested building blocks (leaderstats with saving, coins, shop GUI, checkpoints, kill bricks, round system, day/night, sprint, door, Cmdr admin commands).', inputSchema: { type: 'object', properties: {} }, annotations: RO },
+  { name: 'insert_template', title: 'Insert template', description: 'Insert a template from list_templates into the place (scripts, GUIs, parts and packages it needs). Good starting points that you can then adapt.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
 
   // ---------- packages and GitHub ----------
   { name: 'search_packages', title: 'Search Wally', description: 'Search the Wally package registry (e.g. "cmdr", "knit", "promise").', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }, annotations: RO },

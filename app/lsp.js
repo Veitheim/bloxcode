@@ -12,6 +12,8 @@ const { pathToFileURL, fileURLToPath } = require('url');
 const { unzipSync } = require('fflate');
 
 const LSP_VERSION = '1.70.1';
+const SELENE_VERSION = '0.32.0';
+const SELENE_TOML = 'std = "roblox"\n\n[lints]\n# luau-lsp already reports unused variables\nunused_variable = "allow"\n';
 const DEFS_URL = 'https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.PluginSecurity.d.luau';
 const DOCS_URL = 'https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/api-docs/en-us.json';
 const REFRESH_MS = 7 * 24 * 60 * 60 * 1000;
@@ -28,7 +30,12 @@ function createLsp({ userData, studio, placeKey, emit }) {
   const fileOf = new Map(); // id -> absolute file path
   const idOf = new Map(); // uri -> id
   const versions = new Map(); // uri -> version
-  const diagnostics = new Map(); // id -> [diagnostic]
+  const diagnostics = new Map(); // id -> [diagnostic] from luau-lsp
+  const lintDiags = new Map(); // id -> [diagnostic] from Selene
+  let seleneOn = true;
+  let seleneTimer = null;
+  let seleneRunning = false;
+  let seleneAgain = false;
   const liveText = new Map(); // id -> text from the editor (may be ahead of Studio)
 
   function setState(s, detail = '') {
@@ -127,8 +134,15 @@ function createLsp({ userData, studio, placeKey, emit }) {
   let sourcemapTimer = null;
   function scheduleSourcemap() {
     clearTimeout(sourcemapTimer);
-    sourcemapTimer = setTimeout(() => {
+    sourcemapTimer = setTimeout(async () => {
       if (!workspace) return;
+      // scripts that were just created (templates, Claude, Studio) are not in the mirror yet
+      const fresh = studio.scriptIds().filter((id) => !fileOf.has(id));
+      if (fresh.length && proc && state === 'ready') {
+        try { await studio.loadAllSources(); } catch (_) {}
+        for (const id of fresh) { writeScript(id); openDoc(id); }
+        scheduleSelene();
+      }
       try { fs.writeFileSync(path.join(workspace, 'sourcemap.json'), JSON.stringify(sourcemap())); } catch (_) {}
       if (proc) notify('workspace/didChangeWatchedFiles', { changes: [{ uri: uriOf(path.join(workspace, 'sourcemap.json')), type: 2 }] });
     }, 800);
@@ -214,8 +228,90 @@ function createLsp({ userData, studio, placeKey, emit }) {
         severity: d.severity || 1, message: d.message, code: d.code,
       }));
       diagnostics.set(id, items);
-      emit('lsp:diagnostics', { id, path: studio.pathOf(id), items });
+      emitDiags(id);
     }
+  }
+
+  function combined(id) {
+    return [...(diagnostics.get(id) || []), ...(lintDiags.get(id) || [])];
+  }
+  function emitDiags(id) {
+    emit('lsp:diagnostics', { id, path: studio.pathOf(id), items: combined(id) });
+  }
+
+  // ---------- Selene (linter) ----------
+  async function ensureSelene() {
+    if (process.env.BLOXCODE_SELENE && fs.existsSync(process.env.BLOXCODE_SELENE)) return process.env.BLOXCODE_SELENE;
+    const isWin = process.platform === 'win32';
+    const exe = path.join(userData, 'selene', SELENE_VERSION, isWin ? 'selene.exe' : 'selene');
+    if (fs.existsSync(exe)) return exe;
+    const asset = `selene-${SELENE_VERSION}-${isWin ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux'}.zip`;
+    const zip = unzipSync(new Uint8Array(await download(`https://github.com/Kampfkarren/selene/releases/download/${SELENE_VERSION}/${asset}`)));
+    const entry = Object.keys(zip).find((k) => /(^|\/)selene(\.exe)?$/.test(k));
+    if (!entry) throw new Error('The Selene download did not contain selene.');
+    fs.mkdirSync(path.dirname(exe), { recursive: true });
+    fs.writeFileSync(exe, Buffer.from(zip[entry]));
+    if (!isWin) fs.chmodSync(exe, 0o755);
+    return exe;
+  }
+
+  function scheduleSelene(delay = 1200) {
+    if (!seleneOn || !workspace || !proc) return;
+    clearTimeout(seleneTimer);
+    seleneTimer = setTimeout(runSelene, delay);
+  }
+
+  async function runSelene() {
+    if (!seleneOn || !workspace) return;
+    if (seleneRunning) { seleneAgain = true; return; }
+    seleneRunning = true;
+    try {
+      const exe = await ensureSelene();
+      fs.writeFileSync(path.join(workspace, 'selene.toml'), SELENE_TOML);
+      const out = await new Promise((resolve) => {
+        const child = spawn(exe, ['--display-style=json2', '--num-threads=2', 'src'], { cwd: workspace, windowsHide: true });
+        let buf = '';
+        child.stdout.on('data', (d) => { buf += d; });
+        child.stderr.on('data', () => {});
+        child.on('close', () => resolve(buf));
+        child.on('error', () => resolve(''));
+        setTimeout(() => { try { child.kill(); } catch (_) {} }, 60000);
+      });
+      const next = new Map();
+      for (const line of out.split(/\r?\n/)) {
+        if (!line.startsWith('{')) continue;
+        let d;
+        try { d = JSON.parse(line); } catch (_) { continue; }
+        if (d.type !== 'Diagnostic' || !d.primary_label) continue;
+        const file = path.resolve(workspace, d.primary_label.filename);
+        const id = idOf.get(normUri(uriOf(file)));
+        if (!id) continue;
+        const s = d.primary_label.span;
+        if (!next.has(id)) next.set(id, []);
+        next.get(id).push({
+          line: s.start_line + 1, col: s.start_column + 1, endLine: s.end_line + 1, endCol: s.end_column + 1,
+          severity: d.severity === 'Error' ? 1 : 2, message: `${d.message} (selene: ${d.code})`, code: d.code, source: 'selene',
+        });
+      }
+      const changed = new Set([...lintDiags.keys(), ...next.keys()]);
+      lintDiags.clear();
+      for (const [id, items] of next) lintDiags.set(id, items);
+      for (const id of changed) emitDiags(id);
+    } catch (_) {
+      // offline or blocked: linting is optional, type checking keeps working
+    } finally {
+      seleneRunning = false;
+      if (seleneAgain) { seleneAgain = false; scheduleSelene(400); }
+    }
+  }
+
+  function setSelene(on) {
+    seleneOn = !!on;
+    if (!seleneOn) {
+      const ids = [...lintDiags.keys()];
+      lintDiags.clear();
+      for (const id of ids) emitDiags(id);
+    } else scheduleSelene(200);
   }
 
   // ---------- documents ----------
@@ -235,6 +331,7 @@ function createLsp({ userData, studio, placeKey, emit }) {
     const v = versions.get(uri) + 1;
     versions.set(uri, v);
     notify('textDocument/didChange', { textDocument: { uri, version: v }, contentChanges: [{ text: fs.readFileSync(file, 'utf8') }] });
+    scheduleSelene();
   }
   function closeDoc(id) {
     const file = fileOf.get(id);
@@ -245,6 +342,7 @@ function createLsp({ userData, studio, placeKey, emit }) {
     idOf.delete(normUri(uri));
     fileOf.delete(id);
     diagnostics.delete(id);
+    lintDiags.delete(id);
     liveText.delete(id);
     try { fs.unlinkSync(file); } catch (_) {}
     emit('lsp:diagnostics', { id, path: '', items: [] });
@@ -263,7 +361,7 @@ function createLsp({ userData, studio, placeKey, emit }) {
       fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
       fs.writeFileSync(path.join(workspace, '.luaurc'), JSON.stringify({ languageMode: 'nonstrict' }));
       fs.writeFileSync(path.join(workspace, 'default.project.json'), JSON.stringify({ name: 'Game', tree: { $className: 'DataModel' } }));
-      fileOf.clear(); idOf.clear(); versions.clear(); diagnostics.clear();
+      fileOf.clear(); idOf.clear(); versions.clear(); diagnostics.clear(); lintDiags.clear();
 
       setState('starting', 'Starting the Luau language server…');
       const child = spawn(exe, ['lsp', `--definitions:@roblox=${defs}`, `--docs=${docs}`], { cwd: workspace, windowsHide: true });
@@ -318,6 +416,7 @@ function createLsp({ userData, studio, placeKey, emit }) {
     for (const id of studio.scriptIds()) writeScript(id);
     fs.writeFileSync(path.join(workspace, 'sourcemap.json'), JSON.stringify(sourcemap()));
     for (const id of studio.scriptIds()) openDoc(id);
+    scheduleSelene(300);
   }
 
   function stop() {
@@ -326,6 +425,8 @@ function createLsp({ userData, studio, placeKey, emit }) {
     for (const w of waiting.values()) { clearTimeout(w.timer); w.reject(new Error('luau-lsp stopped.')); }
     waiting.clear();
     diagnostics.clear();
+    lintDiags.clear();
+    clearTimeout(seleneTimer);
     setState('off');
   }
 
@@ -424,12 +525,15 @@ function createLsp({ userData, studio, placeKey, emit }) {
 
   function allDiagnostics() {
     const out = [];
-    for (const [id, items] of diagnostics) if (items.length) out.push({ id, path: studio.pathOf(id), items });
+    for (const id of new Set([...diagnostics.keys(), ...lintDiags.keys()])) {
+      const items = combined(id);
+      if (items.length) out.push({ id, path: studio.pathOf(id), items });
+    }
     return out.sort((a, b) => a.path.localeCompare(b.path));
   }
 
   return {
-    setEnabled, start, stop, call, symbols, updateText, allDiagnostics,
+    setEnabled, setSelene, start, stop, call, symbols, updateText, allDiagnostics,
     get state() { return state; }, get stateDetail() { return stateDetail; },
     getState: () => ({ state, detail: stateDetail }),
   };

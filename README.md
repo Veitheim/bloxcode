@@ -108,7 +108,7 @@ The website is built with [Moonwave](https://eryn.io/moonwave/) and hosted on Cl
 <p align="center">
   <a href="https://bloxcode-docs.seidl.workers.dev/download/windows"><b>Download for Windows</b></a> ·
   <a href="https://bloxcode-docs.seidl.workers.dev/docs/intro">Getting started</a> ·
-  <a href="https://bloxcode-docs.seidl.workers.dev/docs/changelog">What's new in 2.0</a> ·
+  <a href="https://bloxcode-docs.seidl.workers.dev/changelog">Changelog</a> ·
   <a href="https://bloxcode-docs.seidl.workers.dev">Website</a>
 </p>
 

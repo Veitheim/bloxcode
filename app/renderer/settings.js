@@ -21,6 +21,7 @@ const SETTING_DEFAULTS = {
   lineNumbers: true,
   autoSyncDelay: 350,
   lsp: true,
+  selene: true,
   reviewClaude: false,
   testMode: true,
   discord: false,
@@ -83,6 +84,7 @@ function applyEditorOptions() {
 function pushMainSettings() {
   bridge.post('settings:apply', {
     lsp: !!S('lsp'),
+    selene: !!S('selene'),
     reviewClaude: !!S('reviewClaude'),
     testMode: !!S('testMode'),
     discord: !!S('discord'),
@@ -94,7 +96,7 @@ function pushMainSettings() {
 
 function onSettingChanged(key) {
   if (['theme', 'accent', 'uiFontSize', 'reduceMotion'].includes(key)) applyAppearance();
-  else if (['lsp', 'reviewClaude', 'testMode', 'discord', 'discordShowFile', 'discordShowPlace'].includes(key)) pushMainSettings();
+  else if (['lsp', 'selene', 'reviewClaude', 'testMode', 'discord', 'discordShowFile', 'discordShowPlace'].includes(key)) pushMainSettings();
   else applyEditorOptions();
   if (!document.getElementById('settings-page').classList.contains('hidden')) renderSettings();
 }
@@ -104,6 +106,7 @@ function initFeatures() {
   applyEditorOptions();
   pushMainSettings();
   if (typeof initLspClient === 'function') initLspClient();
+  if (typeof initEditorExtras === 'function') initEditorExtras();
   if (typeof initPanel === 'function') initPanel();
 }
 
@@ -206,6 +209,7 @@ function renderSettings() {
 
       <div class="set-section" id="set-luau"><h2>Luau</h2>
         ${setRow('Luau language server', 'Real type checking, errors while you type, hover info, go to definition, find references and rename. Uses <a href="https://github.com/JohnnyMorganz/luau-lsp" target="_blank">luau-lsp</a>, downloaded on first use (about 10 MB).', toggleCtl('lsp'))}
+        ${setRow('Selene linter', 'Warns about common mistakes: unused variables, shadowed names, deprecated Roblox APIs and more. Uses <a href="https://kampfkarren.github.io/selene/" target="_blank">Selene</a> (downloaded on first use). Needs the language server.', toggleCtl('selene'))}
         ${setRow('Status', esc(lsp.detail || (lsp.state === 'off' ? 'Off' : lsp.state || 'Off')), '<button class="small-btn" data-act="lsp-restart">Restart</button>')}
       </div>
 

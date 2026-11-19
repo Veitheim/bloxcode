@@ -20,6 +20,10 @@ Bloxcode runs [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp), the languag
 - **Rename Symbol** (<kbd>F2</kbd>) across all scripts, as one undo step in Studio.
 - **Go to Symbol** (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd>) inside a script.
 
+## Selene linter
+
+Next to the type errors, [Selene](https://kampfkarren.github.io/selene/) warns about common mistakes, like shadowed variables, comparisons that are always true, deprecated Roblox APIs and code that never runs. Its warnings appear in the Problems panel with *(selene: …)* at the end. Turn it off under **Settings → Luau → Selene linter**.
+
 ## Turning it on
 
 It is on by default. The first time, Bloxcode downloads luau-lsp (about 10 MB) and the Roblox type definitions, and then works offline. The status bar shows **✓ Luau** when it runs. Turn it off or restart it under **Settings → Luau**.

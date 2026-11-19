@@ -78,6 +78,7 @@ Play tests and `run_code` need the 2.0 plugin. Restart Roblox Studio once after 
 | Instances | `create_instance`, `create_tree` (a whole GUI or model in one step), `duplicate_instance`, `rename_instance`, `move_instance`, `delete_instance`, `get_properties`, `set_properties` (also attributes and tags, several objects at once), `set_selection`, `insert_asset` |
 | Running | `start_playtest` (Play or Run, optionally for a few seconds with the Output), `stop_playtest`, `get_playtest_state`, `run_code` (Luau in Studio or inside a running test) |
 | Undo | `undo`, `redo`, `get_script_history`, `restore_script_version` |
+| Game overview | `get_remote_map` (all remotes, who fires and listens, security warnings), `get_tags_and_attributes`, `list_templates`, `insert_template` |
 | Packages & GitHub | `search_packages`, `install_package`, `publish_to_github` |
 
 The Bloxcode status bar shows what Claude is doing right now.

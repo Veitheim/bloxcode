@@ -3,6 +3,25 @@
 
 const CHANGELOG = [
   {
+    version: '2.1.0',
+    date: '2026-11-19',
+    title: 'Remote map, templates and smarter code',
+    intro: 'See how your game talks between server and client, start features from tested templates, and catch more mistakes while you type.',
+    sections: [
+      ['New', [
+        '<b>Remote map:</b> every RemoteEvent and RemoteFunction with the scripts that fire and listen to it. Warnings when the server uses client data without checking it, when nobody listens, or when a call is on the wrong side.',
+        '<b>Templates:</b> leaderstats with saving, collectible coins, a shop GUI with server-checked purchases, obby checkpoints, kill bricks, a round system, day and night, sprint, a door with a prompt and Cmdr admin commands. One click, one undo step.',
+        '<b>Tags & attributes:</b> every CollectionService tag and attribute in your place, with the objects that use them. Select them all in Studio with one click.',
+        '<b>Selene linter:</b> warnings about common mistakes next to the type errors.',
+        '<b>Color previews:</b> a swatch next to Color3.fromRGB, Color3.new and Color3.fromHex. Click it to pick a new color.',
+        '<b>Ctrl+click on instance paths</b> like workspace.Map.Door or Remotes:WaitForChild("Buy") selects the object in the Explorer and in Studio, and opens scripts.',
+      ]],
+      ['Claude', [
+        'New tools: get_remote_map, get_tags_and_attributes, list_templates and insert_template.',
+      ]],
+    ],
+  },
+  {
     version: '2.0.2',
     date: '2026-11-19',
     title: 'Discord Rich Presence',

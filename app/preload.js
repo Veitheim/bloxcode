@@ -7,7 +7,7 @@ const INVOKE = new Set([
   'lsp:call', 'lsp:symbols', 'lsp:diagnostics', 'lsp:applyRename', 'lsp:restart',
   'output:all', 'playtest:start', 'playtest:stop',
   'github:state', 'github:token', 'github:device', 'github:signOut', 'github:create', 'github:link', 'github:unlink', 'github:repos', 'github:status', 'github:publish',
-  'theme:export', 'theme:import',
+  'theme:export', 'theme:import', 'remotes:scan', 'tags:scan', 'select:many', 'templates:list', 'templates:insert',
 ]);
 const SEND = new Set(['hud:stop', 'hud:back', 'hud:close', 'history:record', 'settings:apply', 'discord:file', 'lsp:text', 'output:clear', 'review:answer', 'window:titleColor']);
 const ON = new Set(['hud:state', 'hud:log', 'lsp:state', 'lsp:diagnostics', 'search:progress', 'history:changed', 'playtest:state', 'github:state', 'github:error', 'review:request', 'review:cancel']);

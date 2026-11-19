@@ -18,6 +18,8 @@ const { createLsp } = require('./lsp');
 const { createGitHub } = require('./github');
 const { createPlaytest } = require('./playtest');
 const { createDiscord } = require('./discord');
+const { createRemoteMap } = require('./remotes');
+const { createTemplates } = require('./templates');
 const { createAgent, connectClaude, claudeConnectionState } = require('./agent');
 const { isMac, robloxPluginsDir } = require('./platform');
 const { createChat } = require('./chat');
@@ -361,6 +363,8 @@ ipcMain.on('hud:stop', () => playtest.stop());
 ipcMain.on('hud:back', () => focusWindow());
 ipcMain.on('hud:close', () => { if (hud && !hud.isDestroyed()) hud.close(); });
 const discord = createDiscord({ onState: () => sendStatus(true) });
+const remoteMap = createRemoteMap(studio);
+const templates = createTemplates({ studio, packages });
 
 // ---------- review of Claude's changes ----------
 let reviewClaude = false;
@@ -391,7 +395,7 @@ async function editorState() {
 
 // ---------- Claude (MCP) ----------
 const agent = createAgent({
-  studio, search, history, lsp, github, playtest, packages, userData, review, editorState,
+  studio, search, history, lsp, github, playtest, packages, userData, review, editorState, remoteMap, templates,
   onActivity: (text) => {
     agentActivity = { text, time: Date.now() };
     sendEvents([{ op: 'agent', text }]);
@@ -574,6 +578,7 @@ ipcMain.on('window:titleColor', (_e, colors) => {
 ipcMain.on('settings:apply', (_e, s) => {
   if (!s || typeof s !== 'object') return;
   if ('lsp' in s) lsp.setEnabled(!!s.lsp);
+  if ('selene' in s) lsp.setSelene(!!s.selene);
   if ('reviewClaude' in s) reviewClaude = !!s.reviewClaude;
   if ('testMode' in s) testMode = !!s.testMode;
   if ('discord' in s) discord.setEnabled(!!s.discord, s.discordOptions);
@@ -594,6 +599,13 @@ handle('history:restore', async (id, index) => {
 });
 handle('sources:get', (id) => studio.readSource(String(id)));
 ipcMain.on('history:record', (_e, id, source) => { if (studio.isScript(id)) history.record(studio.pathOf(id), String(source), 'you'); });
+
+// remote map, tags & attributes, templates
+handle('remotes:scan', () => remoteMap.scan());
+handle('tags:scan', () => studio.ask({ type: 'scanTags' }, { timeout: 60000, minVersion: 4 }));
+handle('select:many', (ids) => studio.ask({ type: 'setSelection', ids }, { minVersion: 3 }));
+handle('templates:list', () => templates.list());
+handle('templates:insert', (id) => templates.insert(String(id)));
 
 // properties
 handle('props:get', (id) => studio.ask({ type: 'getProperties', id }));

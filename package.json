@@ -1,6 +1,6 @@
 {
   "name": "bloxcode",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "External code editor for Roblox Studio",
   "main": "app/main.js",
   "author": "Veitheim",
@@ -10,7 +10,7 @@
     "icon": "electron tools/make-icon.js",
     "dist": "node tools/build.js",
     "dist:mac": "electron-builder --mac --universal",
-    "docs:build": "cd studio-plugin && npx moonwave build --code src && cd .. && node tools/fix-docs-links.js",
+    "docs:build": "node tools/sync-changelog.js && cd studio-plugin && npx moonwave build --code src && cd .. && node tools/fix-docs-links.js",
     "docs:deploy": "cd studio-plugin && npx wrangler deploy",
     "release": "node tools/release.js",
     "release:mac": "node tools/release.js --mac",

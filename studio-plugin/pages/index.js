@@ -25,6 +25,9 @@ const ICONS = {
   discord: "M8 12h.01M16 12h.01M7.5 7.5c3-1.3 6-1.3 9 0M7.5 16.5c3 1.3 6 1.3 9 0M5 17c-1.5-3-2-6.5-.5-10 1.5-.8 3-1.3 4.5-1.5l.8 1.6M19 17c1.5-3 2-6.5.5-10-1.5-.8-3-1.3-4.5-1.5l-.8 1.6M5 17c1.3 1 2.8 1.7 4.3 2l.9-1.7M19 17c-1.3 1-2.8 1.7-4.3 2l-.9-1.7",
   explorer: "M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 6V5a1 1 0 0 1 1-1h4l2 2",
   sparkle: "M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z",
+  bolt: "M13 3L5 13.5h6L10 21l8-10.5h-6z",
+  grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM17 14v6M14 17h6",
+  tag: "M3 12.6V4a1 1 0 0 1 1-1h8.6a1 1 0 0 1 .7.3l7.4 7.4a1 1 0 0 1 0 1.4l-8.6 8.6a1 1 0 0 1-1.4 0l-7.4-7.4a1 1 0 0 1-.3-.7zM8 8h.01",
 }
 
 const SMALL_FEATURES = [
@@ -34,6 +37,9 @@ const SMALL_FEATURES = [
   ["command", "Command palette", "Every action, one shortcut away."],
   ["discord", "Discord presence", "Show what you're building."],
   ["update", "Updates itself", "New versions install on startup, like Discord."],
+  ["bolt", "Remote map", "Every RemoteEvent and who fires it, with warnings for unchecked client data."],
+  ["grid", "Templates", "Shop, saving, checkpoints, rounds and more in one click."],
+  ["tag", "Tags & attributes", "Every tag and attribute in your place, in one list."],
 ]
 
 const THEMES = [
@@ -112,8 +118,8 @@ export default function Home() {
               <img src={useBaseUrl("img/logo.png")} alt="" className={styles.heroLogo} />
               <span className={styles.brandName}>Bloxcode</span>
             </div>
-            <Link className={styles.badge} to="/docs/changelog">
-              <span className={styles.badgeNew}>New</span> Bloxcode 2.0 is here · See what's new <span aria-hidden="true">→</span>
+            <Link className={styles.badge} to="/changelog">
+              <span className={styles.badgeNew}>New</span> Bloxcode 2.1: remote map, templates & more · See what's new <span aria-hidden="true">→</span>
             </Link>
             <h1 className={styles.title}>
               Write Roblox code
@@ -144,7 +150,7 @@ export default function Home() {
         </section>
 
         <section className={styles.stats}>
-          <div><b>34</b><span>tools for Claude</span></div>
+          <div><b>38</b><span>tools for Claude</span></div>
           <div><b>11</b><span>color themes</span></div>
           <div><b>1 click</b><span>play tests & GitHub</span></div>
           <div><b>100%</b><span>free & open source</span></div>

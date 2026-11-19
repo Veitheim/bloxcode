@@ -211,6 +211,7 @@ async function renameSymbol(ed) {
 
 /** Called for every editor (also the split one). */
 function setupEditorFeatures(ed) {
+  if (typeof setupInstanceLinks === 'function') setupInstanceLinks(ed);
   ed.addAction({ id: 'bx.definition', label: 'Go to Definition', keybindings: [monaco.KeyCode.F12], contextMenuGroupId: 'navigation', contextMenuOrder: 1, run: () => gotoDefinition(ed) });
   ed.addAction({ id: 'bx.references', label: 'Find All References', keybindings: [monaco.KeyMod.Shift | monaco.KeyCode.F12], contextMenuGroupId: 'navigation', contextMenuOrder: 2, run: () => findReferences(ed) });
   ed.addAction({ id: 'bx.rename', label: 'Rename Symbol', keybindings: [monaco.KeyCode.F2], contextMenuGroupId: '1_modification', contextMenuOrder: 1, run: () => renameSymbol(ed) });

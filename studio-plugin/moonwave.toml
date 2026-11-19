@@ -28,7 +28,7 @@ label = "Claude"
 position = "left"
 
 [[navbar.items]]
-to = "/docs/changelog"
+to = "/changelog"
 label = "What's new"
 position = "left"
 

@@ -145,7 +145,7 @@ end
 	Version of the plugin protocol. Bloxcode uses it to tell you when Studio
 	still runs an older copy of the plugin.
 ]=]
-local PLUGIN_VERSION = 3
+local PLUGIN_VERSION = 4
 
 --[=[
 	@prop BASE_URL string
@@ -1163,6 +1163,53 @@ function commands.setSelection(cmd: any)
 	end
 	Selection:Set(list)
 	return { selected = #list }
+end
+
+--[=[
+	Lists every CollectionService tag and every attribute name in the place, with the
+	instances that use them (for Bloxcode's Tags & Attributes view).
+	@within CodeBridge
+	@private
+]=]
+function commands.scanTags(cmd: any)
+	local limit = tonumber(cmd.limit) or 1000
+	local tags = {}
+	for _, tag in CollectionService:GetAllTags() do
+		local list = {}
+		for _, inst in CollectionService:GetTagged(tag) do
+			if #list >= limit then
+				break
+			end
+			table.insert(list, { id = getId(inst), path = pathOf(inst), className = inst.ClassName })
+		end
+		tags[tag] = list
+	end
+	local attributes = {}
+	local started = os.clock()
+	for _, serviceName in TRACKED_SERVICES do
+		local ok, service = pcall(function()
+			return game:GetService(serviceName)
+		end)
+		if ok and service then
+			for _, d in service:GetDescendants() do
+				for key, value in d:GetAttributes() do
+					local list = attributes[key]
+					if not list then
+						list = {}
+						attributes[key] = list
+					end
+					if #list < limit then
+						table.insert(list, { id = getId(d), path = pathOf(d), className = d.ClassName, value = encodeValue(value) })
+					end
+				end
+				if os.clock() - started > 0.012 then
+					task.wait()
+					started = os.clock()
+				end
+			end
+		end
+	end
+	return { tags = tags, attributes = attributes }
 end
 
 local function runCommand(cmd)
